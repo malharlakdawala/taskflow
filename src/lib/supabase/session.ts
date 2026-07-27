@@ -1,5 +1,6 @@
 import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
+import { missingSupabaseEnv, supabaseEnvError } from "@/lib/supabase/config";
 
 /** Routes reachable without a session. Everything else requires sign-in. */
 const PUBLIC_ROUTES = ["/login", "/signup", "/auth/callback"];
@@ -18,6 +19,15 @@ function isPublicRoute(pathname: string) {
  * which is what actually protects the data.
  */
 export async function updateSession(request: NextRequest) {
+  // The proxy runs on every request, so an unconfigured deployment would
+  // otherwise return a bare 500 for the entire site with nothing to go on.
+  if (missingSupabaseEnv().length > 0) {
+    return new NextResponse(supabaseEnvError(), {
+      status: 503,
+      headers: { "content-type": "text/plain; charset=utf-8" },
+    });
+  }
+
   let supabaseResponse = NextResponse.next({ request });
 
   const supabase = createServerClient(
