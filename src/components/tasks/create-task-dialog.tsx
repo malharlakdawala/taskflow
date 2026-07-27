@@ -20,6 +20,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { AssigneePicker } from "@/components/tasks/assignee-picker";
+import { notify } from "@/lib/notify";
 import type { Task, TaskStatus, TaskPriority } from "@/lib/types";
 
 interface CreateTaskDialogProps {
@@ -38,6 +40,7 @@ export function CreateTaskDialog({
   const [status, setStatus] = useState<TaskStatus>("TODO");
   const [priority, setPriority] = useState<TaskPriority>("NONE");
   const [dueDate, setDueDate] = useState("");
+  const [assigneeId, setAssigneeId] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -54,21 +57,27 @@ export function CreateTaskDialog({
           status,
           priority,
           dueDate: dueDate || null,
+          assigneeId,
         }),
       });
 
-      if (response.ok) {
-        const task = await response.json();
-        onTaskCreated(task);
-        setTitle("");
-        setDescription("");
-        setStatus("TODO");
-        setPriority("NONE");
-        setDueDate("");
-        onOpenChange(false);
-      }
+      const body = await response.json();
+      if (!response.ok) throw new Error(body?.error ?? "Could not create task");
+
+      onTaskCreated(body);
+      setTitle("");
+      setDescription("");
+      setStatus("TODO");
+      setPriority("NONE");
+      setDueDate("");
+      setAssigneeId(null);
+      onOpenChange(false);
     } catch (error) {
       console.error("Failed to create task:", error);
+      notify.error(
+        "Could not create task",
+        error instanceof Error ? error.message : undefined
+      );
     } finally {
       setIsLoading(false);
     }
@@ -136,14 +145,24 @@ export function CreateTaskDialog({
                 </Select>
               </div>
             </div>
-            <div className="grid gap-2">
-              <Label htmlFor="dueDate">Due Date</Label>
-              <Input
-                id="dueDate"
-                type="date"
-                value={dueDate}
-                onChange={(e) => setDueDate(e.target.value)}
-              />
+            <div className="grid grid-cols-2 gap-4">
+              <div className="grid gap-2">
+                <Label htmlFor="dueDate">Due Date</Label>
+                <Input
+                  id="dueDate"
+                  type="date"
+                  value={dueDate}
+                  onChange={(e) => setDueDate(e.target.value)}
+                />
+              </div>
+              <div className="grid gap-2">
+                <Label>Assignee</Label>
+                <AssigneePicker
+                  value={assigneeId}
+                  onChange={setAssigneeId}
+                  placeholder="Me"
+                />
+              </div>
             </div>
           </div>
           <DialogFooter>

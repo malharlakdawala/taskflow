@@ -20,22 +20,26 @@ export default function CalendarPage() {
   const [currentMonth, setCurrentMonth] = useState<Date>(new Date());
 
   useEffect(() => {
-    fetchTasks();
-  }, []);
+    let cancelled = false;
 
-  const fetchTasks = async () => {
-    try {
-      const response = await fetch("/api/tasks");
-      if (response.ok) {
+    const fetchTasks = async () => {
+      try {
+        const response = await fetch("/api/tasks");
+        if (!response.ok) throw new Error("Failed to load tasks");
         const data = await response.json();
-        setTasks(data);
+        if (!cancelled) setTasks(data);
+      } catch (error) {
+        console.error("Failed to fetch tasks:", error);
+      } finally {
+        if (!cancelled) setIsLoading(false);
       }
-    } catch (error) {
-      console.error("Failed to fetch tasks:", error);
-    } finally {
-      setIsLoading(false);
-    }
-  };
+    };
+
+    fetchTasks();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const handleTaskCreated = (task: Task) => {
     setTasks(prev => [...prev, task]);

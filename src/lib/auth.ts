@@ -4,14 +4,37 @@ import { NextResponse } from "next/server";
 import type { User as SupabaseUser } from "@supabase/supabase-js";
 import { createClient } from "@/lib/supabase/server";
 import { prisma } from "@/lib/prisma";
+import type { UserRole, UserStatus } from "@/generated/prisma/enums";
 
 export const unauthorized = () =>
   NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
+export const forbidden = (message = "Forbidden") =>
+  NextResponse.json({ error: message }, { status: 403 });
+
+export const pendingApproval = () =>
+  NextResponse.json(
+    { error: "Your account is awaiting approval from an administrator." },
+    { status: 403 }
+  );
+
 /**
- * Returns the signed-in Supabase user, or null. Always use this rather than
- * trusting a client-supplied id.
+ * The signed-in user's id, verified cryptographically.
+ *
+ * getUser() asks the Supabase Auth server to validate the token, which is a
+ * network round-trip costing 150-500ms to the Tokyo region on every single
+ * request. This project signs tokens with ES256 and publishes a JWKS, so
+ * getClaims() verifies the signature locally against a cached key instead —
+ * same security guarantee, no network call.
  */
+export async function getSessionUserId(): Promise<string | null> {
+  const supabase = await createClient();
+  const { data, error } = await supabase.auth.getClaims();
+  if (error || !data?.claims?.sub) return null;
+  return data.claims.sub;
+}
+
+/** Full user object from the Auth server. Only needed where profile metadata matters. */
 export async function getSessionUser(): Promise<SupabaseUser | null> {
   const supabase = await createClient();
   const {
@@ -20,37 +43,59 @@ export async function getSessionUser(): Promise<SupabaseUser | null> {
   return user;
 }
 
+export type AppUser = {
+  id: string;
+  email: string;
+  name: string | null;
+  avatarUrl: string | null;
+  role: UserRole;
+  status: UserStatus;
+};
+
 /**
- * Returns the signed-in user and guarantees a matching row exists in
- * taskflow."User", so foreign keys on Task/Comment always resolve.
+ * Loads the application user for the current session.
  *
- * The on_auth_user_created database trigger normally does this at sign-up; the
- * upsert here is a safety net for accounts created outside that path.
+ * This used to upsert on every request as a safety net, which cost a full
+ * database round-trip (~140ms to the Tokyo region) on every single API call.
+ * The on_auth_user_created trigger already guarantees the row exists, so a
+ * plain indexed lookup is enough — and it is the same query the caller needs
+ * anyway to check role and approval status.
  */
-export async function getCurrentDbUser() {
-  const user = await getSessionUser();
-  if (!user) return null;
+export async function getAppUser(): Promise<AppUser | null> {
+  const userId = await getSessionUserId();
+  if (!userId) return null;
 
-  const metadata = user.user_metadata ?? {};
-  const name =
-    (typeof metadata.name === "string" && metadata.name.trim()) ||
-    (typeof metadata.full_name === "string" && metadata.full_name.trim()) ||
-    null;
-  const avatarUrl =
-    typeof metadata.avatar_url === "string" ? metadata.avatar_url : null;
-
-  return prisma.user.upsert({
-    where: { id: user.id },
-    create: {
-      id: user.id,
-      email: user.email ?? `${user.id}@unknown.local`,
-      name,
-      avatarUrl,
-    },
-    update: {
-      email: user.email ?? undefined,
-      ...(name ? { name } : {}),
-      ...(avatarUrl ? { avatarUrl } : {}),
+  return prisma.user.findUnique({
+    where: { id: userId },
+    select: {
+      id: true,
+      email: true,
+      name: true,
+      avatarUrl: true,
+      role: true,
+      status: true,
     },
   });
+}
+
+type Guard =
+  | { ok: true; user: AppUser }
+  | { ok: false; response: NextResponse };
+
+/** Requires an approved member. Use at the top of every data route. */
+export async function requireMember(): Promise<Guard> {
+  const user = await getAppUser();
+  if (!user) return { ok: false, response: unauthorized() };
+  if (user.status !== "ACTIVE") return { ok: false, response: pendingApproval() };
+  return { ok: true, user };
+}
+
+/** Requires an approved admin. */
+export async function requireAdmin(): Promise<Guard> {
+  const guard = await requireMember();
+  if (!guard.ok) return guard;
+  if (guard.user.role !== "ADMIN") {
+    return { ok: false, response: forbidden("Admin access required") };
+  }
+  return guard;
 }

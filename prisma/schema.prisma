@@ -10,6 +10,9 @@
 generator client {
   provider = "prisma-client"
   output   = "../src/generated/prisma"
+  // Lets queries opt into a single JOIN instead of one round-trip per relation.
+  // Round-trips to the Tokyo database cost ~140ms each, so this matters.
+  previewFeatures = ["relationJoins"]
 }
 
 datasource db {
@@ -36,19 +39,43 @@ enum TaskPriority {
   @@map("task_priority")
 }
 
+enum UserRole {
+  ADMIN
+  MEMBER
+
+  @@map("user_role")
+}
+
+/// New sign-ups start PENDING and cannot read any data until an admin approves.
+enum UserStatus {
+  PENDING
+  ACTIVE
+  REJECTED
+
+  @@map("user_status")
+}
+
 /// Mirror of auth.users, kept in sync by the on_auth_user_created trigger.
 /// `id` is deliberately the same uuid as the Supabase auth user id, so a session
 /// user id can be used directly as a foreign key.
 model User {
-  id           String    @id @db.Uuid
-  email        String    @unique
+  id           String     @id @db.Uuid
+  email        String     @unique
   name         String?
   avatarUrl    String?
-  tasks        Task[]    @relation("TaskAssignee")
-  createdTasks Task[]    @relation("TaskCreatedBy")
+  role         UserRole   @default(MEMBER)
+  status       UserStatus @default(PENDING)
+  approvedAt   DateTime?  @db.Timestamptz(6)
+  approvedById String?    @db.Uuid
+  approvedBy   User?      @relation("UserApprovedBy", fields: [approvedById], references: [id], onDelete: SetNull)
+  approved     User[]     @relation("UserApprovedBy")
+  tasks        Task[]     @relation("TaskAssignee")
+  createdTasks Task[]     @relation("TaskCreatedBy")
   comments     Comment[]
-  createdAt    DateTime  @default(now()) @db.Timestamptz(6)
-  updatedAt    DateTime  @updatedAt @db.Timestamptz(6)
+  createdAt    DateTime   @default(now()) @db.Timestamptz(6)
+  updatedAt    DateTime   @updatedAt @db.Timestamptz(6)
+
+  @@index([status], map: "User_status_idx")
 }
 
 model Task {

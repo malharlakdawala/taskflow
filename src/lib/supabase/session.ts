@@ -51,10 +51,11 @@ export async function updateSession(request: NextRequest) {
     }
   );
 
-  // Refresh the session — critical for keeping cookies fresh.
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  // Verifies the token signature locally against the cached JWKS rather than
+  // calling the Auth server, and still refreshes the cookie when it is stale.
+  // getUser() here added a 150-500ms network hop to every page and API request.
+  const { data: claims } = await supabase.auth.getClaims();
+  const user = claims?.claims?.sub ? { id: claims.claims.sub } : null;
 
   const { pathname, search } = request.nextUrl;
 

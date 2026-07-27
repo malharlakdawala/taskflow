@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
-import { getSessionUser, unauthorized } from "@/lib/auth";
+import { requireMember } from "@/lib/auth";
 import { ATTACHMENT_BUCKET, MAX_UPLOAD_BYTES, uploadToBucket } from "@/lib/storage";
 
 /**
@@ -9,8 +9,8 @@ import { ATTACHMENT_BUCKET, MAX_UPLOAD_BYTES, uploadToBucket } from "@/lib/stora
  * POST /api/tasks/[id]/attachments so a database row is created too.
  */
 export async function POST(request: Request) {
-  const user = await getSessionUser();
-  if (!user) return unauthorized();
+  const guard = await requireMember();
+  if (!guard.ok) return guard.response;
 
   const formData = await request.formData();
   const file = formData.get("file");
@@ -27,7 +27,7 @@ export async function POST(request: Request) {
   }
 
   const supabase = await createClient();
-  const result = await uploadToBucket(supabase, user.id, file);
+  const result = await uploadToBucket(supabase, guard.user.id, file);
 
   if ("error" in result) {
     return NextResponse.json({ error: result.error }, { status: 500 });

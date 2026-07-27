@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { createClient } from "@/lib/supabase/server";
-import { getCurrentDbUser, unauthorized } from "@/lib/auth";
+import { requireMember } from "@/lib/auth";
 import { MAX_UPLOAD_BYTES, uploadToBucket } from "@/lib/storage";
 
 /**
@@ -13,8 +13,8 @@ export async function POST(
   request: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  const user = await getCurrentDbUser();
-  if (!user) return unauthorized();
+  const guard = await requireMember();
+  if (!guard.ok) return guard.response;
 
   const { id } = await params;
 
@@ -41,7 +41,7 @@ export async function POST(
   }
 
   const supabase = await createClient();
-  const result = await uploadToBucket(supabase, user.id, file);
+  const result = await uploadToBucket(supabase, guard.user.id, file);
 
   if ("error" in result) {
     return NextResponse.json({ error: result.error }, { status: 500 });

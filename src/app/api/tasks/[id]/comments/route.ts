@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { getCurrentDbUser, unauthorized } from "@/lib/auth";
+import { requireMember } from "@/lib/auth";
 import { createCommentSchema, formatZodError } from "@/lib/validation";
 import { serializeComment } from "@/lib/tasks";
 
@@ -8,14 +8,14 @@ export async function GET(
   request: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  const user = await getCurrentDbUser();
-  if (!user) return unauthorized();
+  const guard = await requireMember();
+  if (!guard.ok) return guard.response;
 
   const { id } = await params;
 
   const comments = await prisma.comment.findMany({
     where: { taskId: id },
-    include: { author: true },
+    include: { author: { select: { id: true, email: true, name: true, avatarUrl: true } } },
     orderBy: { createdAt: "desc" },
   });
 
@@ -26,10 +26,10 @@ export async function POST(
   request: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  // getCurrentDbUser guarantees the author row exists, so the authorId foreign
-  // key resolves. Previously this inserted an auth uuid with no matching row.
-  const user = await getCurrentDbUser();
-  if (!user) return unauthorized();
+  // The auth trigger guarantees the author row exists, so the authorId
+  // foreign key resolves.
+  const guard = await requireMember();
+  if (!guard.ok) return guard.response;
 
   const { id } = await params;
 
@@ -50,9 +50,9 @@ export async function POST(
     data: {
       content: parsed.data.content,
       taskId: id,
-      authorId: user.id,
+      authorId: guard.user.id,
     },
-    include: { author: true },
+    include: { author: { select: { id: true, email: true, name: true, avatarUrl: true } } },
   });
 
   return NextResponse.json(serializeComment(comment), { status: 201 });

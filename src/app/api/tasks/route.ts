@@ -1,24 +1,32 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { getCurrentDbUser, unauthorized } from "@/lib/auth";
+import { requireMember } from "@/lib/auth";
 import { createTaskSchema, formatZodError } from "@/lib/validation";
-import { TASK_INCLUDE, serializeTask } from "@/lib/tasks";
+import {
+  TASK_LIST_SELECT,
+  TASK_DETAIL_INCLUDE,
+  serializeTaskRow,
+  serializeTask,
+} from "@/lib/tasks";
 
 export async function GET() {
-  const user = await getCurrentDbUser();
-  if (!user) return unauthorized();
+  const guard = await requireMember();
+  if (!guard.ok) return guard.response;
 
   const tasks = await prisma.task.findMany({
-    include: TASK_INCLUDE,
+    // One JOIN rather than a query per relation — round-trips are the
+    // dominant cost against a geographically distant database.
+    relationLoadStrategy: "join",
+    select: TASK_LIST_SELECT,
     orderBy: [{ order: "asc" }, { createdAt: "desc" }],
   });
 
-  return NextResponse.json(tasks.map(serializeTask));
+  return NextResponse.json(tasks.map(serializeTaskRow));
 }
 
 export async function POST(request: Request) {
-  const user = await getCurrentDbUser();
-  if (!user) return unauthorized();
+  const guard = await requireMember();
+  if (!guard.ok) return guard.response;
 
   const parsed = createTaskSchema.safeParse(await request.json());
   if (!parsed.success) {
@@ -27,10 +35,10 @@ export async function POST(request: Request) {
 
   const { title, description, status, priority, dueDate, assigneeId } =
     parsed.data;
+  const resolvedStatus = status ?? "TODO";
 
-  // Place the new task at the bottom of its column.
   const last = await prisma.task.findFirst({
-    where: { status: status ?? "TODO" },
+    where: { status: resolvedStatus },
     orderBy: { order: "desc" },
     select: { order: true },
   });
@@ -39,14 +47,15 @@ export async function POST(request: Request) {
     data: {
       title,
       description: description?.trim() ? description : undefined,
-      status: status ?? "TODO",
+      status: resolvedStatus,
       priority: priority ?? "NONE",
       dueDate: dueDate ? new Date(dueDate) : undefined,
       order: (last?.order ?? 0) + 1000,
-      assigneeId: assigneeId ?? user.id,
-      createdById: user.id,
+      assigneeId: assigneeId ?? guard.user.id,
+      createdById: guard.user.id,
     },
-    include: TASK_INCLUDE,
+    relationLoadStrategy: "join",
+    include: TASK_DETAIL_INCLUDE,
   });
 
   return NextResponse.json(serializeTask(task), { status: 201 });

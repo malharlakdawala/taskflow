@@ -1,11 +1,28 @@
 export type TaskStatus = "BACKLOG" | "TODO" | "IN_PROGRESS" | "IN_REVIEW" | "DONE";
 export type TaskPriority = "URGENT" | "HIGH" | "MEDIUM" | "LOW" | "NONE";
+export type UserRole = "ADMIN" | "MEMBER";
+export type UserStatus = "PENDING" | "ACTIVE" | "REJECTED";
 
 export interface User {
   id: string;
   email: string;
   name: string | null;
   avatarUrl: string | null;
+}
+
+/** The signed-in user, as handed from the server layout to the sidebar. */
+export interface SessionUser extends User {
+  role: UserRole;
+  status: UserStatus;
+}
+
+/** A member row on the admin Settings screen. */
+export interface Member extends User {
+  role: UserRole;
+  status: UserStatus;
+  approvedAt: string | null;
+  createdAt: string;
+  assignedTaskCount: number;
 }
 
 export interface Task {
@@ -23,6 +40,9 @@ export interface Task {
   comments: Comment[];
   attachments: Attachment[];
   tags: TaskTag[];
+  /** Present on every payload; list endpoints send counts instead of the arrays. */
+  commentCount: number;
+  attachmentCount: number;
   createdAt: string;
   updatedAt: string;
 }

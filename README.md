@@ -20,9 +20,14 @@ integration over the Model Context Protocol.
 - **List View** — Sortable table of all tasks
 - **Calendar View** — Tasks laid out by due date
 - **Dashboard** — Stats overview with status and priority breakdowns
-- **Rich Text Editor** — Tiptap with headings, lists, code blocks, links, images, tables
+- **List View** — Sortable, with multi-select and bulk edit of status, priority,
+  assignee and due date in a single request
+- **Assignees** — Pick an assignee on create or from the task detail view
+- **Rich Text Editor** — Tiptap with headings, lists, code blocks, links, tables,
+  and image upload by file picker, paste, or drag-and-drop
 - **Comments** — Per-task discussion
 - **File Attachments** — Uploads to Supabase Storage, recorded against the task
+- **Admin Settings** — Approve or decline new sign-ups, manage roles
 - **Dark Mode**
 - **MCP Server** — Manage tasks from the terminal
 
@@ -79,10 +84,41 @@ The schema, the auth sync trigger, the RLS policies, and the
 `task-attachments` storage bucket are already provisioned. To recreate them on a
 fresh project, replay the migrations in `supabase/migrations/` in order.
 
+## Membership and Roles
+
+The first account to sign up becomes an **admin** and is active immediately.
+Every later sign-up lands in a **pending** state and sees only an approval
+screen — no task data is sent to the browser at all, because the check runs in
+the `(dashboard)` server layout before any markup is produced.
+
+Admins get a **Settings** page to approve, decline, revoke, and promote members.
+Two safeguards: you cannot change your own role or status, and the last active
+admin cannot be demoted or removed.
+
+## Performance Notes
+
+The database lives in `ap-northeast-1` (Tokyo), so each round-trip from
+elsewhere is expensive. Three things keep request counts down — undo them at
+your peril:
+
+- **`getClaims()`, not `getUser()`** (`src/lib/auth.ts`, `src/lib/supabase/session.ts`).
+  Tokens are ES256 with a published JWKS, so the signature is verified locally.
+  `getUser()` calls the Auth server, which measured 150–500ms *per request*, and
+  it ran twice per request (proxy + route).
+- **`relationLoadStrategy: "join"`** on task queries. Prisma otherwise issues one
+  query per relation, turning a board load into ~6 sequential round-trips.
+- **List endpoints return counts, not arrays.** `TASK_LIST_SELECT` omits comments
+  and attachments; only the detail view loads them.
+
+`vercel.json` pins functions to `hnd1` (Tokyo) so the server sits beside the
+database. If you move the database, move this too.
+
 ## Security Model
 
 - All application tables have RLS enabled; `anon` has no grants at all, and the
   `taskflow` schema is not exposed to the Data API.
+- RLS mirrors the approval model: `taskflow.is_active_member()` gates task data
+  and `taskflow.is_admin()` gates member management.
 - Attachment URLs are public and unguessable (uuid-prefixed), but the bucket
   cannot be listed — there is no SELECT policy on `storage.objects`, so nobody
   can enumerate uploads. Writes are confined to the uploader's own `<uid>/` prefix.

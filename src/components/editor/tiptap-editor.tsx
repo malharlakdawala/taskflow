@@ -1,6 +1,7 @@
 "use client";
 
-import { useEditor, EditorContent } from "@tiptap/react";
+import { useEffect, useRef, useState } from "react";
+import { useEditor, EditorContent, type Editor } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
 import Placeholder from "@tiptap/extension-placeholder";
 import Link from "@tiptap/extension-link";
@@ -36,10 +37,12 @@ import {
   Table as TableIcon,
   Undo,
   Redo,
+  Loader2,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import { cn } from "@/lib/utils";
+import { notify } from "@/lib/notify";
 
 interface TiptapEditorProps {
   content: string;
@@ -56,6 +59,10 @@ export function TiptapEditor({
   editable = true,
   className,
 }: TiptapEditorProps) {
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const editorRef = useRef<Editor | null>(null);
+  const [isUploading, setIsUploading] = useState(false);
+
   const editor = useEditor({
     extensions: [
       StarterKit.configure({
@@ -103,6 +110,26 @@ export function TiptapEditor({
           className
         ),
       },
+      // Dropping or pasting an image file uploads it rather than inserting a
+      // useless local blob: URL that breaks as soon as the page reloads.
+      handleDrop: (_view, event) => {
+        const files = Array.from(event.dataTransfer?.files ?? []).filter((f) =>
+          f.type.startsWith("image/")
+        );
+        if (files.length === 0) return false;
+        event.preventDefault();
+        void uploadFiles(files);
+        return true;
+      },
+      handlePaste: (_view, event) => {
+        const files = Array.from(event.clipboardData?.files ?? []).filter((f) =>
+          f.type.startsWith("image/")
+        );
+        if (files.length === 0) return false;
+        event.preventDefault();
+        void uploadFiles(files);
+        return true;
+      },
     },
     onUpdate: ({ editor }) => {
       onChange(editor.getHTML());
@@ -110,6 +137,46 @@ export function TiptapEditor({
     editable,
     immediatelyRender: false,
   });
+
+  /**
+   * Sends each image to /api/upload and inserts the returned public URL.
+   * Declared before the early return so the editorProps handlers can close
+   * over it; it reads `editor` from the ref rather than the binding.
+   */
+  async function uploadFiles(files: File[]) {
+    const active = editorRef.current;
+    if (!active) return;
+
+    setIsUploading(true);
+    try {
+      for (const file of files) {
+        const body = new FormData();
+        body.append("file", file);
+
+        const response = await fetch("/api/upload", { method: "POST", body });
+        const payload = await response.json().catch(() => ({}));
+
+        if (!response.ok) {
+          throw new Error(payload?.error ?? "Upload failed");
+        }
+        active.chain().focus().setImage({ src: payload.url, alt: file.name }).run();
+      }
+    } catch (error) {
+      console.error("Image upload failed:", error);
+      notify.error(
+        "Could not upload image",
+        error instanceof Error ? error.message : undefined
+      );
+    } finally {
+      setIsUploading(false);
+    }
+  }
+
+  // Assigned in an effect rather than during render; the upload handlers only
+  // read it in response to user interaction, well after mount.
+  useEffect(() => {
+    editorRef.current = editor;
+  }, [editor]);
 
   if (!editor) {
     return null;
@@ -122,11 +189,14 @@ export function TiptapEditor({
     }
   };
 
-  const addImage = () => {
-    const url = window.prompt("Enter image URL:");
-    if (url) {
-      editor.chain().focus().setImage({ src: url }).run();
-    }
+  /** Opens the OS file picker; no URL typing involved. */
+  const addImage = () => fileInputRef.current?.click();
+
+  const handleFileInput = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(event.target.files ?? []);
+    if (files.length > 0) void uploadFiles(files);
+    // Reset so picking the same file twice still fires a change event.
+    event.target.value = "";
   };
 
   const addTable = () => {
@@ -296,9 +366,15 @@ export function TiptapEditor({
             size="icon"
             className="h-8 w-8"
             onClick={addImage}
+            disabled={isUploading}
+            title="Insert image — you can also paste or drag one in"
             data-active={editor.isActive("image")}
           >
-            <ImageIcon className="h-4 w-4" />
+            {isUploading ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              <ImageIcon className="h-4 w-4" />
+            )}
           </Button>
           <Button
             variant="ghost"
@@ -352,7 +428,21 @@ export function TiptapEditor({
           </Button>
         </div>
       )}
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept="image/*"
+        multiple
+        hidden
+        onChange={handleFileInput}
+      />
       <EditorContent editor={editor} className="min-h-[200px]" />
+      {isUploading && (
+        <p className="flex items-center gap-2 border-t px-4 py-2 text-xs text-muted-foreground">
+          <Loader2 className="h-3 w-3 animate-spin" />
+          Uploading image…
+        </p>
+      )}
     </div>
   );
 }

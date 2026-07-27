@@ -1,32 +1,80 @@
 import type { Prisma } from "@/generated/prisma/client";
 
-/** Everything the task UI needs, in one shape, used by every task endpoint. */
-export const TASK_INCLUDE = {
-  assignee: true,
-  createdBy: true,
+/** Only the user fields the UI renders — never leak approval state into task payloads. */
+const USER_SUMMARY = {
+  id: true,
+  email: true,
+  name: true,
+  avatarUrl: true,
+} satisfies Prisma.UserSelect;
+
+/**
+ * Board / list / calendar shape. Deliberately excludes comments and
+ * attachments: those views never render them, and loading every comment for
+ * every task was the single biggest contributor to slow page loads.
+ * `_count` gives the UI its badge numbers for one extra aggregate.
+ */
+export const TASK_LIST_SELECT = {
+  id: true,
+  title: true,
+  description: true,
+  status: true,
+  priority: true,
+  dueDate: true,
+  order: true,
+  assigneeId: true,
+  createdById: true,
+  createdAt: true,
+  updatedAt: true,
+  assignee: { select: USER_SUMMARY },
+  createdBy: { select: USER_SUMMARY },
+  _count: { select: { comments: true, attachments: true } },
+} satisfies Prisma.TaskSelect;
+
+/** Full shape for the single-task detail page. */
+export const TASK_DETAIL_INCLUDE = {
+  assignee: { select: USER_SUMMARY },
+  createdBy: { select: USER_SUMMARY },
   comments: {
-    include: { author: true },
+    include: { author: { select: USER_SUMMARY } },
     orderBy: { createdAt: "desc" },
   },
   attachments: { orderBy: { createdAt: "asc" } },
   tags: { include: { tag: true } },
 } satisfies Prisma.TaskInclude;
 
-type TaskWithRelations = Prisma.TaskGetPayload<{ include: typeof TASK_INCLUDE }>;
+type TaskListRow = Prisma.TaskGetPayload<{ select: typeof TASK_LIST_SELECT }>;
+type TaskDetailRow = Prisma.TaskGetPayload<{ include: typeof TASK_DETAIL_INCLUDE }>;
 
 /**
  * `description` and `comment.content` are jsonb columns holding Tiptap HTML.
- * Prisma types them as JsonValue, so normalise to the string|null the UI expects.
+ * Prisma types them as JsonValue, so normalise to the string|null the UI wants.
  */
 function asRichText(value: Prisma.JsonValue | null | undefined): string | null {
   if (value === null || value === undefined) return null;
   return typeof value === "string" ? value : JSON.stringify(value);
 }
 
-export function serializeTask(task: TaskWithRelations) {
+/** List rows carry counts instead of the full comment/attachment arrays. */
+export function serializeTaskRow(task: TaskListRow) {
+  const { _count, ...rest } = task;
+  return {
+    ...rest,
+    description: asRichText(task.description),
+    commentCount: _count.comments,
+    attachmentCount: _count.attachments,
+    comments: [],
+    attachments: [],
+    tags: [],
+  };
+}
+
+export function serializeTask(task: TaskDetailRow) {
   return {
     ...task,
     description: asRichText(task.description),
+    commentCount: task.comments.length,
+    attachmentCount: task.attachments.length,
     comments: task.comments.map((comment) => ({
       ...comment,
       content: asRichText(comment.content) ?? "",

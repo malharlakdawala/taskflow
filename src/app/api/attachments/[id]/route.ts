@@ -1,15 +1,15 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { createClient } from "@/lib/supabase/server";
-import { getCurrentDbUser, unauthorized } from "@/lib/auth";
+import { requireMember } from "@/lib/auth";
 import { ATTACHMENT_BUCKET } from "@/lib/storage";
 
 export async function DELETE(
   request: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  const user = await getCurrentDbUser();
-  if (!user) return unauthorized();
+  const guard = await requireMember();
+  if (!guard.ok) return guard.response;
 
   const { id } = await params;
 

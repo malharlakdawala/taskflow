@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { getCurrentDbUser, unauthorized } from "@/lib/auth";
+import { requireMember } from "@/lib/auth";
 import { reorderTasksSchema, formatZodError } from "@/lib/validation";
 
 /**
@@ -9,8 +9,8 @@ import { reorderTasksSchema, formatZodError } from "@/lib/validation";
  * never ends up half-reordered.
  */
 export async function POST(request: Request) {
-  const user = await getCurrentDbUser();
-  if (!user) return unauthorized();
+  const guard = await requireMember();
+  if (!guard.ok) return guard.response;
 
   const parsed = reorderTasksSchema.safeParse(await request.json());
   if (!parsed.success) {

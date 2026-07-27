@@ -2,11 +2,12 @@
 
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Calendar, User } from "lucide-react";
+import { Calendar, MessageSquare, Paperclip } from "lucide-react";
 import Link from "next/link";
 import type { Task } from "@/lib/types";
 import { PRIORITY_CONFIG } from "@/lib/types";
-import { cn } from "@/lib/utils";
+import { cn, toPlainText } from "@/lib/utils";
+import { UserChip } from "@/components/tasks/user-chip";
 
 interface TaskCardProps {
   task: Task;
@@ -14,8 +15,12 @@ interface TaskCardProps {
   onDelete?: (taskId: string) => void;
 }
 
-export function TaskCard({ task, isDragging, onDelete }: TaskCardProps) {
+export function TaskCard({ task, isDragging }: TaskCardProps) {
   const priorityConfig = PRIORITY_CONFIG[task.priority];
+  const preview = toPlainText(task.description);
+
+  const due = task.dueDate ? new Date(task.dueDate) : null;
+  const isOverdue = due !== null && due < new Date() && task.status !== "DONE";
 
   return (
     <Link href={`/tasks/${task.id}`}>
@@ -30,34 +35,52 @@ export function TaskCard({ task, isDragging, onDelete }: TaskCardProps) {
             <div className="flex items-start justify-between gap-2">
               <h3 className="font-medium line-clamp-2">{task.title}</h3>
               {task.priority !== "NONE" && (
-                <span className={cn("text-xs font-medium", priorityConfig.color)}>
+                <span
+                  className={cn(
+                    "shrink-0 text-xs font-medium",
+                    priorityConfig.color
+                  )}
+                >
                   {priorityConfig.label}
                 </span>
               )}
             </div>
-            
-            {task.description && (
+
+            {preview && (
               <p className="text-sm text-muted-foreground line-clamp-2">
-                {typeof task.description === 'string' 
-                  ? task.description 
-                  : JSON.stringify(task.description)}
+                {preview}
               </p>
             )}
 
-            <div className="flex items-center gap-2 text-xs text-muted-foreground">
-              {task.dueDate && (
-                <div className="flex items-center gap-1">
+            <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
+              {due && (
+                <span
+                  className={cn(
+                    "flex items-center gap-1",
+                    isOverdue && "font-medium text-destructive"
+                  )}
+                >
                   <Calendar className="h-3 w-3" />
-                  {new Date(task.dueDate).toLocaleDateString()}
-                </div>
+                  {due.toLocaleDateString()}
+                </span>
               )}
-              {task.assignee && (
-                <div className="flex items-center gap-1">
-                  <User className="h-3 w-3" />
-                  {task.assignee.name || task.assignee.email}
-                </div>
+              {task.commentCount > 0 && (
+                <span className="flex items-center gap-1">
+                  <MessageSquare className="h-3 w-3" />
+                  {task.commentCount}
+                </span>
+              )}
+              {task.attachmentCount > 0 && (
+                <span className="flex items-center gap-1">
+                  <Paperclip className="h-3 w-3" />
+                  {task.attachmentCount}
+                </span>
               )}
             </div>
+
+            {task.assignee && (
+              <UserChip user={task.assignee} className="pt-1" />
+            )}
 
             {task.tags.length > 0 && (
               <div className="flex flex-wrap gap-1">
@@ -66,7 +89,11 @@ export function TaskCard({ task, isDragging, onDelete }: TaskCardProps) {
                     key={tag.id}
                     variant="secondary"
                     className="text-xs"
-                    style={tag.tag.color ? { backgroundColor: tag.tag.color } : undefined}
+                    style={
+                      tag.tag.color
+                        ? { backgroundColor: tag.tag.color }
+                        : undefined
+                    }
                   >
                     {tag.tag.name}
                   </Badge>

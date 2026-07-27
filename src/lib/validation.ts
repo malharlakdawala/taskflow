@@ -69,6 +69,37 @@ export const reorderTasksSchema = z.object({
     .max(500),
 });
 
+/** Bulk edit from the list view. At least one field must actually change. */
+export const bulkUpdateSchema = z
+  .object({
+    ids: z.array(z.uuid()).min(1).max(500),
+    status: statusSchema.optional(),
+    priority: prioritySchema.optional(),
+    assigneeId: z.uuid().nullable().optional(),
+    dueDate: dueDateSchema.optional(),
+  })
+  .refine(
+    (data) =>
+      data.status !== undefined ||
+      data.priority !== undefined ||
+      data.assigneeId !== undefined ||
+      data.dueDate !== undefined,
+    { message: "No fields to update" }
+  );
+
+export const bulkDeleteSchema = z.object({
+  ids: z.array(z.uuid()).min(1).max(500),
+});
+
+export const updateMemberSchema = z
+  .object({
+    role: z.enum(["ADMIN", "MEMBER"]).optional(),
+    status: z.enum(["PENDING", "ACTIVE", "REJECTED"]).optional(),
+  })
+  .refine((data) => Object.keys(data).length > 0, {
+    message: "No fields to update",
+  });
+
 export const createCommentSchema = z.object({
   content: z.string().trim().min(1, "Comment cannot be empty").max(100_000),
 });

@@ -1,9 +1,9 @@
 import { NextResponse } from "next/server";
 import { Prisma } from "@/generated/prisma/client";
 import { prisma } from "@/lib/prisma";
-import { getCurrentDbUser, unauthorized } from "@/lib/auth";
+import { requireMember } from "@/lib/auth";
 import { updateTaskSchema, formatZodError } from "@/lib/validation";
-import { TASK_INCLUDE, serializeTask } from "@/lib/tasks";
+import { TASK_DETAIL_INCLUDE, serializeTask } from "@/lib/tasks";
 
 const notFound = () =>
   NextResponse.json({ error: "Task not found" }, { status: 404 });
@@ -12,14 +12,15 @@ export async function GET(
   request: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  const user = await getCurrentDbUser();
-  if (!user) return unauthorized();
+  const guard = await requireMember();
+  if (!guard.ok) return guard.response;
 
   const { id } = await params;
 
   const task = await prisma.task.findUnique({
     where: { id },
-    include: TASK_INCLUDE,
+    relationLoadStrategy: "join",
+    include: TASK_DETAIL_INCLUDE,
   });
 
   if (!task) return notFound();
@@ -31,8 +32,8 @@ export async function PATCH(
   request: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  const user = await getCurrentDbUser();
-  if (!user) return unauthorized();
+  const guard = await requireMember();
+  if (!guard.ok) return guard.response;
 
   const { id } = await params;
 
@@ -44,13 +45,7 @@ export async function PATCH(
   const { title, description, status, priority, dueDate, assigneeId, order } =
     parsed.data;
 
-  const existing = await prisma.task.findUnique({
-    where: { id },
-    select: { id: true },
-  });
-  if (!existing) return notFound();
-
-  // Fields are applied individually so only the allow-listed columns can change.
+  // Fields are applied individually so only allow-listed columns can change.
   const data: Prisma.TaskUncheckedUpdateInput = {};
   if (title !== undefined) data.title = title;
   if (description !== undefined) {
@@ -63,31 +58,46 @@ export async function PATCH(
   if (assigneeId !== undefined) data.assigneeId = assigneeId;
   if (order !== undefined) data.order = order;
 
-  const task = await prisma.task.update({
-    where: { id },
-    data,
-    include: TASK_INCLUDE,
-  });
-
-  return NextResponse.json(serializeTask(task));
+  // update() throws P2025 when the row is gone, which saves a pre-read.
+  try {
+    const task = await prisma.task.update({
+      where: { id },
+      data,
+      relationLoadStrategy: "join",
+      include: TASK_DETAIL_INCLUDE,
+    });
+    return NextResponse.json(serializeTask(task));
+  } catch (error) {
+    if (
+      error instanceof Prisma.PrismaClientKnownRequestError &&
+      error.code === "P2025"
+    ) {
+      return notFound();
+    }
+    throw error;
+  }
 }
 
 export async function DELETE(
   request: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  const user = await getCurrentDbUser();
-  if (!user) return unauthorized();
+  const guard = await requireMember();
+  if (!guard.ok) return guard.response;
 
   const { id } = await params;
 
-  const existing = await prisma.task.findUnique({
-    where: { id },
-    select: { id: true },
-  });
-  if (!existing) return notFound();
-
-  await prisma.task.delete({ where: { id } });
+  try {
+    await prisma.task.delete({ where: { id } });
+  } catch (error) {
+    if (
+      error instanceof Prisma.PrismaClientKnownRequestError &&
+      error.code === "P2025"
+    ) {
+      return notFound();
+    }
+    throw error;
+  }
 
   return NextResponse.json({ success: true });
 }
