@@ -178,9 +178,10 @@ Configuration → Redirect URLs so email confirmation links resolve correctly.
 ## Project Structure
 
 ```
-proxy.ts                 # Route protection (Next 16 renamed middleware → proxy)
 supabase/migrations/     # Source of truth for the database schema
 src/
+├── proxy.ts             # Route protection. Next 16 renamed middleware → proxy;
+│                        # it must sit beside app/, so inside src/ — not the repo root.
 ├── app/
 │   ├── (auth)/          # Login & signup pages
 │   ├── (dashboard)/     # Dashboard, board, list, calendar, task detail
