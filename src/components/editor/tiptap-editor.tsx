@@ -44,6 +44,26 @@ import { Separator } from "@/components/ui/separator";
 import { cn } from "@/lib/utils";
 import { notify } from "@/lib/notify";
 
+/** Pulls inline base64 images out of pasted HTML and turns them into Files. */
+function dataUriImagesFrom(html: string): File[] {
+  const files: File[] = [];
+  const pattern = /<img[^>]+src=["'](data:image\/([a-z+]+);base64,([^"']+))["']/gi;
+
+  for (const match of html.matchAll(pattern)) {
+    const [, , subtype, base64] = match;
+    try {
+      const binary = atob(base64);
+      const bytes = new Uint8Array(binary.length);
+      for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+      const type = `image/${subtype}`;
+      files.push(new File([bytes], `pasted-image.${subtype}`, { type }));
+    } catch {
+      // Malformed base64 — skip it rather than breaking the whole paste.
+    }
+  }
+  return files;
+}
+
 interface TiptapEditorProps {
   content: string;
   onChange: (content: string) => void;
@@ -125,10 +145,24 @@ export function TiptapEditor({
         const files = Array.from(event.clipboardData?.files ?? []).filter((f) =>
           f.type.startsWith("image/")
         );
-        if (files.length === 0) return false;
-        event.preventDefault();
-        void uploadFiles(files);
-        return true;
+        if (files.length > 0) {
+          event.preventDefault();
+          void uploadFiles(files);
+          return true;
+        }
+
+        // Copying an image from a web page yields HTML with an inline
+        // data: URI rather than a file. Those are rejected by the server-side
+        // sanitiser, so upload them properly instead of losing the image.
+        const html = event.clipboardData?.getData("text/html");
+        const embedded = html ? dataUriImagesFrom(html) : [];
+        if (embedded.length > 0) {
+          event.preventDefault();
+          void uploadFiles(embedded);
+          return true;
+        }
+
+        return false;
       },
     },
     onUpdate: ({ editor }) => {
