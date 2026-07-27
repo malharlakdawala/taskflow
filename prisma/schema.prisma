@@ -1,0 +1,120 @@
+// TaskFlow data model.
+//
+// These tables live in the dedicated `taskflow` Postgres schema, NOT `public`,
+// so they stay isolated from the CRM tables in the same Supabase project.
+// The schema is selected at runtime by the driver adapter in src/lib/prisma.ts.
+//
+// DDL is owned by Supabase migrations, not `prisma migrate`. After changing this
+// file run `npx prisma generate` and apply a matching SQL migration in Supabase.
+
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum TaskStatus {
+  BACKLOG
+  TODO
+  IN_PROGRESS
+  IN_REVIEW
+  DONE
+
+  @@map("task_status")
+}
+
+enum TaskPriority {
+  URGENT
+  HIGH
+  MEDIUM
+  LOW
+  NONE
+
+  @@map("task_priority")
+}
+
+/// Mirror of auth.users, kept in sync by the on_auth_user_created trigger.
+/// `id` is deliberately the same uuid as the Supabase auth user id, so a session
+/// user id can be used directly as a foreign key.
+model User {
+  id           String    @id @db.Uuid
+  email        String    @unique
+  name         String?
+  avatarUrl    String?
+  tasks        Task[]    @relation("TaskAssignee")
+  createdTasks Task[]    @relation("TaskCreatedBy")
+  comments     Comment[]
+  createdAt    DateTime  @default(now()) @db.Timestamptz(6)
+  updatedAt    DateTime  @updatedAt @db.Timestamptz(6)
+}
+
+model Task {
+  id          String       @id @default(uuid()) @db.Uuid
+  title       String
+  description Json?
+  status      TaskStatus   @default(TODO)
+  priority    TaskPriority @default(NONE)
+  dueDate     DateTime?    @db.Timestamptz(6)
+  order       Float        @default(0)
+  assigneeId  String?      @db.Uuid
+  assignee    User?        @relation("TaskAssignee", fields: [assigneeId], references: [id], onDelete: SetNull)
+  createdById String?      @db.Uuid
+  createdBy   User?        @relation("TaskCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  comments    Comment[]
+  attachments Attachment[]
+  tags        TaskTag[]
+  createdAt   DateTime     @default(now()) @db.Timestamptz(6)
+  updatedAt   DateTime     @updatedAt @db.Timestamptz(6)
+
+  @@index([status], map: "Task_status_idx")
+  @@index([assigneeId], map: "Task_assigneeId_idx")
+  @@index([priority], map: "Task_priority_idx")
+  @@index([status, order], map: "Task_order_idx")
+}
+
+model Comment {
+  id        String   @id @default(uuid()) @db.Uuid
+  content   Json
+  taskId    String   @db.Uuid
+  task      Task     @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  authorId  String   @db.Uuid
+  author    User     @relation(fields: [authorId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @db.Timestamptz(6)
+
+  @@index([taskId], map: "Comment_taskId_idx")
+}
+
+model Attachment {
+  id        String   @id @default(uuid()) @db.Uuid
+  filename  String
+  url       String
+  fileSize  Int
+  mimeType  String
+  taskId    String   @db.Uuid
+  task      Task     @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+
+  @@index([taskId], map: "Attachment_taskId_idx")
+}
+
+model Tag {
+  id        String    @id @default(uuid()) @db.Uuid
+  name      String    @unique
+  color     String?
+  tasks     TaskTag[]
+  createdAt DateTime  @default(now()) @db.Timestamptz(6)
+}
+
+model TaskTag {
+  id     String @id @default(uuid()) @db.Uuid
+  taskId String @db.Uuid
+  task   Task   @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  tagId  String @db.Uuid
+  tag    Tag    @relation(fields: [tagId], references: [id], onDelete: Cascade)
+
+  @@unique([taskId, tagId], map: "TaskTag_taskId_tagId_key")
+}
