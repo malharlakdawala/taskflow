@@ -4,7 +4,16 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { z } from "zod";
 import pg from "pg";
-import "dotenv/config";
+import dotenv from "dotenv";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
+
+// MCP clients launch this server from an arbitrary working directory, so the
+// .env file has to be resolved relative to the script rather than to cwd.
+// Loading it via "dotenv/config" would silently find nothing and the server
+// would exit on startup with only "Connection closed" at the client.
+const here = path.dirname(fileURLToPath(import.meta.url));
+dotenv.config({ path: path.resolve(here, "../.env"), quiet: true });
 
 /**
  * Talks to Postgres directly rather than through the Supabase REST API.
@@ -132,10 +141,10 @@ server.tool(
         `insert into taskflow."Task"
            (title, description, status, priority, "dueDate", "order", "assigneeId", "createdById")
          values (
-           $1, $2, $3::taskflow.task_status, $4::taskflow.task_priority, $5,
+           $1, $2, $3::taskflow.task_status, $4::taskflow.task_priority, $5::timestamptz,
            coalesce((select max("order") from taskflow."Task"
                       where status = $3::taskflow.task_status), 0) + 1000,
-           coalesce($6, $7), $7
+           coalesce($6::uuid, $7::uuid), $7::uuid
          )
          returning id, title, status, priority, "dueDate", "createdAt"`,
         [
@@ -295,7 +304,7 @@ server.tool(
 
       const { rows } = await pool.query(
         `insert into taskflow."Comment" (content, "taskId", "authorId")
-         values ($1, $2, $3)
+         values ($1::jsonb, $2::uuid, $3::uuid)
          returning id, content, "createdAt"`,
         [JSON.stringify(content), task_id, authorId]
       );
