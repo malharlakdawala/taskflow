@@ -1,4 +1,5 @@
 import type { Prisma } from "@/generated/prisma/client";
+import { sanitizeRichText } from "@/lib/sanitize";
 
 /** Only the user fields the UI renders — never leak approval state into task payloads. */
 const USER_SUMMARY = {
@@ -55,6 +56,16 @@ function asRichText(value: Prisma.JsonValue | null | undefined): string | null {
   return typeof value === "string" ? value : JSON.stringify(value);
 }
 
+/**
+ * Content is already sanitised on write, but rows created before that existed
+ * were not — and the UI renders this through dangerouslySetInnerHTML. Cleaning
+ * on the way out too means no stored row can ever inject script.
+ */
+function asSafeRichText(value: Prisma.JsonValue | null | undefined): string | null {
+  const raw = asRichText(value);
+  return raw === null ? null : sanitizeRichText(raw);
+}
+
 /** List rows carry counts instead of the full comment/attachment arrays. */
 export function serializeTaskRow(task: TaskListRow) {
   const { _count, ...rest } = task;
@@ -72,12 +83,12 @@ export function serializeTaskRow(task: TaskListRow) {
 export function serializeTask(task: TaskDetailRow) {
   return {
     ...task,
-    description: asRichText(task.description),
+    description: asSafeRichText(task.description),
     commentCount: task.comments.length,
     attachmentCount: task.attachments.length,
     comments: task.comments.map((comment) => ({
       ...comment,
-      content: asRichText(comment.content) ?? "",
+      content: asSafeRichText(comment.content) ?? "",
     })),
   };
 }
@@ -85,5 +96,5 @@ export function serializeTask(task: TaskDetailRow) {
 export function serializeComment<T extends { content: Prisma.JsonValue }>(
   comment: T
 ) {
-  return { ...comment, content: asRichText(comment.content) ?? "" };
+  return { ...comment, content: asSafeRichText(comment.content) ?? "" };
 }

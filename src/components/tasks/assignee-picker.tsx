@@ -1,5 +1,6 @@
 "use client";
 
+import { useMemo } from "react";
 import {
   Select,
   SelectContent,
@@ -28,8 +29,17 @@ export function AssigneePicker({
   const { members, isLoading } = useMembers();
   const selected = members.find((m) => m.id === value) ?? null;
 
+  // Without this map Base UI renders the raw value, which showed the
+  // "__unassigned__" sentinel and bare uuids in the trigger.
+  const items = useMemo(() => {
+    const map: Record<string, string> = { [UNASSIGNED]: placeholder };
+    for (const member of members) map[member.id] = displayName(member);
+    return map;
+  }, [members, placeholder]);
+
   return (
     <Select
+      items={items}
       value={value ?? UNASSIGNED}
       onValueChange={(next) =>
         onChange(next === UNASSIGNED || next === null ? null : next)
@@ -40,11 +50,13 @@ export function AssigneePicker({
         {selected ? (
           <UserChip user={selected} />
         ) : (
-          <SelectValue placeholder={isLoading ? "Loading…" : placeholder} />
+          <SelectValue placeholder={isLoading ? "Loading…" : placeholder}>
+            {() => placeholder}
+          </SelectValue>
         )}
       </SelectTrigger>
       <SelectContent>
-        <SelectItem value={UNASSIGNED}>Unassigned</SelectItem>
+        <SelectItem value={UNASSIGNED}>{placeholder}</SelectItem>
         {members.map((member) => (
           <SelectItem key={member.id} value={member.id}>
             {displayName(member)}

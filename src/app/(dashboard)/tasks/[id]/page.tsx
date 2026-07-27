@@ -22,7 +22,7 @@ import { AssigneePicker } from "@/components/tasks/assignee-picker";
 import { UserChip } from "@/components/tasks/user-chip";
 import { notify } from "@/lib/notify";
 import type { Attachment, Comment, Task } from "@/lib/types";
-import { STATUS_CONFIG, PRIORITY_CONFIG } from "@/lib/types";
+import { STATUS_CONFIG, PRIORITY_CONFIG, STATUS_ITEMS, PRIORITY_ITEMS } from "@/lib/types";
 
 /** Waited out before persisting the description, so typing isn't one request per keystroke. */
 const DESCRIPTION_SAVE_DELAY = 800;
@@ -380,6 +380,7 @@ export default function TaskDetailPage() {
                 <div className="space-y-2">
                   <label className="text-sm font-medium">Status</label>
                   <Select
+                    items={STATUS_ITEMS}
                     value={task.status}
                     onValueChange={(v) => v && patch({ status: v })}
                   >
@@ -399,6 +400,7 @@ export default function TaskDetailPage() {
                 <div className="space-y-2">
                   <label className="text-sm font-medium">Priority</label>
                   <Select
+                    items={PRIORITY_ITEMS}
                     value={task.priority}
                     onValueChange={(v) => v && patch({ priority: v })}
                   >

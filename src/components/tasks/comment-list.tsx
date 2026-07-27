@@ -2,8 +2,10 @@
 
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
-import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { TiptapEditor } from "@/components/editor/tiptap-editor";
+import { RichText } from "@/components/rich-text";
+import { notify } from "@/lib/notify";
+import { displayName, initialsFor, toPlainText } from "@/lib/utils";
 import type { Comment } from "@/lib/types";
 import { formatDistanceToNow } from "date-fns";
 
@@ -16,9 +18,15 @@ interface CommentListProps {
 export function CommentList({ comments, taskId, onCommentAdded }: CommentListProps) {
   const [newComment, setNewComment] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
+  // Remounts the editor after a successful post so it visibly clears.
+  const [editorKey, setEditorKey] = useState(0);
+
+  // An "empty" Tiptap document is still "<p></p>", so check the text content.
+  const hasContent =
+    toPlainText(newComment).length > 0 || /<img\b/i.test(newComment);
 
   const handleSubmitComment = async () => {
-    if (!newComment.trim()) return;
+    if (!hasContent) return;
 
     setIsSubmitting(true);
     try {
@@ -27,14 +35,18 @@ export function CommentList({ comments, taskId, onCommentAdded }: CommentListPro
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ content: newComment }),
       });
+      const body = await response.json();
+      if (!response.ok) throw new Error(body?.error ?? "Could not post comment");
 
-      if (response.ok) {
-        const comment = await response.json();
-        onCommentAdded(comment);
-        setNewComment("");
-      }
+      onCommentAdded(body);
+      setNewComment("");
+      setEditorKey((k) => k + 1);
     } catch (error) {
       console.error("Failed to add comment:", error);
+      notify.error(
+        "Could not post comment",
+        error instanceof Error ? error.message : undefined
+      );
     } finally {
       setIsSubmitting(false);
     }
@@ -43,27 +55,27 @@ export function CommentList({ comments, taskId, onCommentAdded }: CommentListPro
   return (
     <div className="space-y-4">
       <div className="space-y-4">
+        {comments.length === 0 && (
+          <p className="py-2 text-sm text-muted-foreground">No comments yet</p>
+        )}
         {comments.map((comment) => (
           <div key={comment.id} className="flex gap-3">
-            <Avatar className="h-8 w-8">
-              <AvatarFallback>
-                {comment.author.name?.charAt(0) || comment.author.email.charAt(0).toUpperCase()}
-              </AvatarFallback>
-            </Avatar>
-            <div className="flex-1">
+            <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-primary/10 text-xs font-semibold text-primary">
+              {initialsFor(comment.author)}
+            </span>
+            <div className="min-w-0 flex-1">
               <div className="flex items-center gap-2">
                 <span className="text-sm font-medium">
-                  {comment.author.name || "Unnamed"}
+                  {displayName(comment.author)}
                 </span>
                 <span className="text-xs text-muted-foreground">
-                  {formatDistanceToNow(new Date(comment.createdAt), { addSuffix: true })}
+                  {formatDistanceToNow(new Date(comment.createdAt), {
+                    addSuffix: true,
+                  })}
                 </span>
               </div>
-              <div className="mt-1 text-sm prose prose-sm max-w-none">
-                {typeof comment.content === 'string' 
-                  ? comment.content 
-                  : JSON.stringify(comment.content)}
-              </div>
+              {/* Previously printed the raw HTML string as text. */}
+              <RichText html={comment.content} className="mt-1 text-sm" />
             </div>
           </div>
         ))}
@@ -71,18 +83,19 @@ export function CommentList({ comments, taskId, onCommentAdded }: CommentListPro
 
       <div className="pt-4 border-t">
         <TiptapEditor
-          content={newComment}
+          key={editorKey}
+          content=""
           onChange={setNewComment}
-          placeholder="Write a comment..."
+          placeholder="Write a comment… you can paste or drag in images"
           className="min-h-[100px]"
         />
         <div className="flex justify-end mt-2">
           <Button
             onClick={handleSubmitComment}
-            disabled={!newComment.trim() || isSubmitting}
+            disabled={!hasContent || isSubmitting}
             size="sm"
           >
-            {isSubmitting ? "Posting..." : "Post Comment"}
+            {isSubmitting ? "Posting…" : "Post Comment"}
           </Button>
         </div>
       </div>

@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireMember } from "@/lib/auth";
+import { sanitizeOrNull } from "@/lib/sanitize";
 import { createTaskSchema, formatZodError } from "@/lib/validation";
 import {
   TASK_LIST_SELECT,
@@ -46,7 +47,7 @@ export async function POST(request: Request) {
   const task = await prisma.task.create({
     data: {
       title,
-      description: description?.trim() ? description : undefined,
+      description: sanitizeOrNull(description) ?? undefined,
       status: resolvedStatus,
       priority: priority ?? "NONE",
       dueDate: dueDate ? new Date(dueDate) : undefined,

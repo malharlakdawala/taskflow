@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireMember } from "@/lib/auth";
+import { sanitizeOrNull } from "@/lib/sanitize";
 import { createCommentSchema, formatZodError } from "@/lib/validation";
 import { serializeComment } from "@/lib/tasks";
 
@@ -46,9 +47,14 @@ export async function POST(
     return NextResponse.json({ error: "Task not found" }, { status: 404 });
   }
 
+  const content = sanitizeOrNull(parsed.data.content);
+  if (!content) {
+    return NextResponse.json({ error: "Comment cannot be empty" }, { status: 400 });
+  }
+
   const comment = await prisma.comment.create({
     data: {
-      content: parsed.data.content,
+      content,
       taskId: id,
       authorId: guard.user.id,
     },

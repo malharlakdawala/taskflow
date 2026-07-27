@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { Prisma } from "@/generated/prisma/client";
 import { prisma } from "@/lib/prisma";
 import { requireMember } from "@/lib/auth";
+import { sanitizeOrNull } from "@/lib/sanitize";
 import { updateTaskSchema, formatZodError } from "@/lib/validation";
 import { TASK_DETAIL_INCLUDE, serializeTask } from "@/lib/tasks";
 
@@ -50,7 +51,7 @@ export async function PATCH(
   if (title !== undefined) data.title = title;
   if (description !== undefined) {
     // Clearing a nullable Json column needs Prisma.DbNull, not a bare null.
-    data.description = description?.trim() ? description : Prisma.DbNull;
+    data.description = sanitizeOrNull(description) ?? Prisma.DbNull;
   }
   if (status !== undefined) data.status = status;
   if (priority !== undefined) data.priority = priority;

@@ -14,6 +14,7 @@ import { Trash2, X, Loader2 } from "lucide-react";
 import { AssigneePicker } from "@/components/tasks/assignee-picker";
 import { notify } from "@/lib/notify";
 import type { Task } from "@/lib/types";
+import { STATUS_ITEMS, PRIORITY_ITEMS } from "@/lib/types";
 
 /**
  * Floating bar shown while rows are selected in the list view.
@@ -101,6 +102,7 @@ export function BulkActionBar({
 
         <div className="w-[150px]">
           <Select
+            items={STATUS_ITEMS}
             value=""
             disabled={isBusy}
             onValueChange={(v) =>
@@ -122,6 +124,7 @@ export function BulkActionBar({
 
         <div className="w-[150px]">
           <Select
+            items={PRIORITY_ITEMS}
             value=""
             disabled={isBusy}
             onValueChange={(v) =>

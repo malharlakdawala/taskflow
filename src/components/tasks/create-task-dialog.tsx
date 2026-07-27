@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import {
   Dialog,
   DialogContent,
@@ -12,7 +12,6 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
 import {
   Select,
   SelectContent,
@@ -20,9 +19,20 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Paperclip, Upload, X, Loader2 } from "lucide-react";
+import { TiptapEditor } from "@/components/editor/tiptap-editor";
 import { AssigneePicker } from "@/components/tasks/assignee-picker";
 import { notify } from "@/lib/notify";
 import type { Task, TaskStatus, TaskPriority } from "@/lib/types";
+import { STATUS_ITEMS, PRIORITY_ITEMS } from "@/lib/types";
+
+/** A file already in storage, waiting for the task to exist so it can be recorded. */
+type PendingAttachment = {
+  url: string;
+  filename: string;
+  fileSize: number;
+  mimeType: string;
+};
 
 interface CreateTaskDialogProps {
   open: boolean;
@@ -41,10 +51,64 @@ export function CreateTaskDialog({
   const [priority, setPriority] = useState<TaskPriority>("NONE");
   const [dueDate, setDueDate] = useState("");
   const [assigneeId, setAssigneeId] = useState<string | null>(null);
+  const [attachments, setAttachments] = useState<PendingAttachment[]>([]);
+  const [isUploading, setIsUploading] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
+  const [editorKey, setEditorKey] = useState(0);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const reset = () => {
+    setTitle("");
+    setDescription("");
+    setStatus("TODO");
+    setPriority("NONE");
+    setDueDate("");
+    setAssigneeId(null);
+    setAttachments([]);
+    setEditorKey((k) => k + 1);
+  };
+
+  /**
+   * Files upload as soon as they are chosen, because the task they belong to
+   * does not exist yet; they are recorded against it after creation.
+   */
+  const handleFiles = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(event.target.files ?? []);
+    event.target.value = "";
+    if (files.length === 0) return;
+
+    setIsUploading(true);
+    try {
+      for (const file of files) {
+        const body = new FormData();
+        body.append("file", file);
+        const response = await fetch("/api/upload", { method: "POST", body });
+        const payload = await response.json();
+        if (!response.ok) throw new Error(payload?.error ?? "Upload failed");
+
+        setAttachments((prev) => [
+          ...prev,
+          {
+            url: payload.url,
+            filename: payload.filename,
+            fileSize: payload.fileSize,
+            mimeType: payload.mimeType || "application/octet-stream",
+          },
+        ]);
+      }
+    } catch (error) {
+      notify.error(
+        "Could not upload file",
+        error instanceof Error ? error.message : undefined
+      );
+    } finally {
+      setIsUploading(false);
+    }
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!title.trim()) return;
     setIsLoading(true);
 
     try {
@@ -61,16 +125,39 @@ export function CreateTaskDialog({
         }),
       });
 
-      const body = await response.json();
-      if (!response.ok) throw new Error(body?.error ?? "Could not create task");
+      const task: Task = await response.json();
+      if (!response.ok) {
+        throw new Error(
+          (task as { error?: string })?.error ?? "Could not create task"
+        );
+      }
 
-      onTaskCreated(body);
-      setTitle("");
-      setDescription("");
-      setStatus("TODO");
-      setPriority("NONE");
-      setDueDate("");
-      setAssigneeId(null);
+      // Record any files uploaded before the task had an id.
+      if (attachments.length > 0) {
+        const saved = await Promise.all(
+          attachments.map(async (attachment) => {
+            const res = await fetch(`/api/tasks/${task.id}/attachments`, {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify(attachment),
+            });
+            return res.ok ? await res.json() : null;
+          })
+        );
+        const attached = saved.filter(Boolean);
+        task.attachments = attached;
+        task.attachmentCount = attached.length;
+
+        if (attached.length < attachments.length) {
+          notify.error(
+            "Some files could not be attached",
+            "The task was created; add them again from the task page."
+          );
+        }
+      }
+
+      onTaskCreated(task);
+      reset();
       onOpenChange(false);
     } catch (error) {
       console.error("Failed to create task:", error);
@@ -85,11 +172,12 @@ export function CreateTaskDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-[425px]">
+      <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-[720px]">
         <DialogHeader>
           <DialogTitle>Create New Task</DialogTitle>
           <DialogDescription>
-            Add a new task to your board. Fill in the details below.
+            Add formatting, images and files here — no need to open the task
+            afterwards.
           </DialogDescription>
         </DialogHeader>
         <form onSubmit={handleSubmit}>
@@ -104,19 +192,83 @@ export function CreateTaskDialog({
                 required
               />
             </div>
+
             <div className="grid gap-2">
-              <Label htmlFor="description">Description</Label>
-              <Textarea
-                id="description"
-                value={description}
-                onChange={(e) => setDescription(e.target.value)}
-                placeholder="Task description (optional)"
+              <Label>Description</Label>
+              <TiptapEditor
+                key={editorKey}
+                content=""
+                onChange={setDescription}
+                placeholder="Describe the task… paste or drag in images"
               />
             </div>
-            <div className="grid grid-cols-2 gap-4">
+
+            <div className="grid gap-2">
+              <div className="flex items-center justify-between">
+                <Label>Attachments</Label>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  disabled={isUploading}
+                  onClick={() => fileInputRef.current?.click()}
+                >
+                  {isUploading ? (
+                    <Loader2 className="mr-1 h-4 w-4 animate-spin" />
+                  ) : (
+                    <Upload className="mr-1 h-4 w-4" />
+                  )}
+                  Add files
+                </Button>
+              </div>
+              <input
+                ref={fileInputRef}
+                type="file"
+                multiple
+                hidden
+                onChange={handleFiles}
+              />
+              {attachments.length > 0 && (
+                <ul className="space-y-1">
+                  {attachments.map((attachment) => (
+                    <li
+                      key={attachment.url}
+                      className="flex items-center gap-2 rounded-md border p-2 text-sm"
+                    >
+                      <Paperclip className="h-4 w-4 shrink-0 text-muted-foreground" />
+                      <span className="min-w-0 flex-1 truncate">
+                        {attachment.filename}
+                      </span>
+                      <span className="shrink-0 text-xs text-muted-foreground">
+                        {(attachment.fileSize / 1024).toFixed(0)} KB
+                      </span>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon"
+                        className="h-6 w-6 shrink-0"
+                        onClick={() =>
+                          setAttachments((prev) =>
+                            prev.filter((a) => a.url !== attachment.url)
+                          )
+                        }
+                      >
+                        <X className="h-3 w-3" />
+                      </Button>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+
+            <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
               <div className="grid gap-2">
                 <Label>Status</Label>
-                <Select value={status} onValueChange={(v) => setStatus(v as TaskStatus)}>
+                <Select
+                  items={STATUS_ITEMS}
+                  value={status}
+                  onValueChange={(v) => v && setStatus(v as TaskStatus)}
+                >
                   <SelectTrigger>
                     <SelectValue placeholder="Select status" />
                   </SelectTrigger>
@@ -131,7 +283,11 @@ export function CreateTaskDialog({
               </div>
               <div className="grid gap-2">
                 <Label>Priority</Label>
-                <Select value={priority} onValueChange={(v) => setPriority(v as TaskPriority)}>
+                <Select
+                  items={PRIORITY_ITEMS}
+                  value={priority}
+                  onValueChange={(v) => v && setPriority(v as TaskPriority)}
+                >
                   <SelectTrigger>
                     <SelectValue placeholder="Select priority" />
                   </SelectTrigger>
@@ -144,8 +300,6 @@ export function CreateTaskDialog({
                   </SelectContent>
                 </Select>
               </div>
-            </div>
-            <div className="grid grid-cols-2 gap-4">
               <div className="grid gap-2">
                 <Label htmlFor="dueDate">Due Date</Label>
                 <Input
@@ -166,8 +320,11 @@ export function CreateTaskDialog({
             </div>
           </div>
           <DialogFooter>
-            <Button type="submit" disabled={isLoading}>
-              {isLoading ? "Creating..." : "Create Task"}
+            <Button
+              type="submit"
+              disabled={isLoading || isUploading || !title.trim()}
+            >
+              {isLoading ? "Creating…" : "Create Task"}
             </Button>
           </DialogFooter>
         </form>

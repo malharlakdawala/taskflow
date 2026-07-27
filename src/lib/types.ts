@@ -88,6 +88,26 @@ export const STATUS_CONFIG: Record<TaskStatus, { label: string; color: string }>
   DONE: { label: "Done", color: "bg-green-500" },
 };
 
+/**
+ * Base UI's Select renders the raw value unless Select.Root is given an `items`
+ * map, which is why dropdowns showed "TODO" instead of "To Do".
+ */
+export const STATUS_ITEMS: Record<string, string> = {
+  BACKLOG: "Backlog",
+  TODO: "To Do",
+  IN_PROGRESS: "In Progress",
+  IN_REVIEW: "In Review",
+  DONE: "Done",
+};
+
+export const PRIORITY_ITEMS: Record<string, string> = {
+  NONE: "No Priority",
+  LOW: "Low",
+  MEDIUM: "Medium",
+  HIGH: "High",
+  URGENT: "Urgent",
+};
+
 export const PRIORITY_CONFIG: Record<TaskPriority, { label: string; color: string }> = {
   URGENT: { label: "Urgent", color: "text-red-500" },
   HIGH: { label: "High", color: "text-orange-500" },

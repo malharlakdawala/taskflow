@@ -3,11 +3,16 @@ import { prisma } from "@/lib/prisma";
 import { createClient } from "@/lib/supabase/server";
 import { requireMember } from "@/lib/auth";
 import { MAX_UPLOAD_BYTES, uploadToBucket } from "@/lib/storage";
+import { createAttachmentSchema, formatZodError } from "@/lib/validation";
 
 /**
- * Uploads a file to Supabase Storage AND records it against the task. The old
- * /api/upload route did the first half only, so attachments were never
- * persisted and never appeared on a task.
+ * Attaches a file to a task, two ways:
+ *
+ *  - multipart/form-data with a `file` — uploads to storage, then records it.
+ *  - application/json with {url, filename, fileSize, mimeType} — records a file
+ *    that was already uploaded. The create-task dialog needs this because
+ *    files are chosen before the task exists, so they go to storage first and
+ *    are registered once the task has an id.
  */
 export async function POST(
   request: Request,
@@ -17,6 +22,26 @@ export async function POST(
   if (!guard.ok) return guard.response;
 
   const { id } = await params;
+
+  if (request.headers.get("content-type")?.includes("application/json")) {
+    const parsed = createAttachmentSchema.safeParse(await request.json());
+    if (!parsed.success) {
+      return NextResponse.json(formatZodError(parsed.error), { status: 400 });
+    }
+
+    const task = await prisma.task.findUnique({
+      where: { id },
+      select: { id: true },
+    });
+    if (!task) {
+      return NextResponse.json({ error: "Task not found" }, { status: 404 });
+    }
+
+    const attachment = await prisma.attachment.create({
+      data: { ...parsed.data, taskId: id },
+    });
+    return NextResponse.json(attachment, { status: 201 });
+  }
 
   const task = await prisma.task.findUnique({
     where: { id },
