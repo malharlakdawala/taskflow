@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   Dialog,
   DialogContent,
@@ -38,16 +38,19 @@ interface CreateTaskDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onTaskCreated: (task: Task) => void;
+  /** Preselects the status, so "Add task" inside a list section lands there. */
+  defaultStatus?: TaskStatus;
 }
 
 export function CreateTaskDialog({
   open,
   onOpenChange,
   onTaskCreated,
+  defaultStatus,
 }: CreateTaskDialogProps) {
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
-  const [status, setStatus] = useState<TaskStatus>("TODO");
+  const [status, setStatus] = useState<TaskStatus>(defaultStatus ?? "TODO");
   const [priority, setPriority] = useState<TaskPriority>("NONE");
   const [dueDate, setDueDate] = useState("");
   const [assigneeId, setAssigneeId] = useState<string | null>(null);
@@ -57,10 +60,20 @@ export function CreateTaskDialog({
   const [editorKey, setEditorKey] = useState(0);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  // Re-sync when reopened from a different list section. Tracking the last
+  // value avoids setting state on every render the effect happens to run in.
+  const lastDefault = useRef(defaultStatus);
+  useEffect(() => {
+    if (open && defaultStatus && lastDefault.current !== defaultStatus) {
+      lastDefault.current = defaultStatus;
+      setStatus(defaultStatus);
+    }
+  }, [open, defaultStatus]);
+
   const reset = () => {
     setTitle("");
     setDescription("");
-    setStatus("TODO");
+    setStatus(defaultStatus ?? "TODO");
     setPriority("NONE");
     setDueDate("");
     setAssigneeId(null);

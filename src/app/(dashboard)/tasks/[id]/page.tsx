@@ -7,7 +7,18 @@ import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
 import { Skeleton } from "@/components/ui/skeleton";
-import { ArrowLeft, Trash2, Paperclip, Upload, X, Check, Loader2 } from "lucide-react";
+import {
+  ArrowLeft,
+  Trash2,
+  Paperclip,
+  Upload,
+  X,
+  Check,
+  Loader2,
+  AlignLeft,
+  MessageSquare,
+  FileText,
+} from "lucide-react";
 import {
   Select,
   SelectContent,
@@ -287,11 +298,11 @@ export default function TaskDetailPage() {
       </header>
 
       <div className="flex-1 overflow-auto p-6">
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          <div className="lg:col-span-2 space-y-6">
+        <div className="mx-auto grid max-w-6xl grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1fr)_320px]">
+          <div className="min-w-0 space-y-5">
             <Card>
               <CardHeader className="flex-row items-center justify-between space-y-0">
-                <CardTitle>Description</CardTitle>
+                <CardTitle className="flex items-center gap-2 text-base"><AlignLeft className="h-4 w-4 text-muted-foreground" />Description</CardTitle>
                 <span className="flex items-center gap-1 text-xs text-muted-foreground">
                   {isSavingDescription ? (
                     <>
@@ -317,20 +328,22 @@ export default function TaskDetailPage() {
 
             <Card>
               <CardHeader className="flex-row items-center justify-between space-y-0">
-                <CardTitle>Attachments ({task.attachments.length})</CardTitle>
-                <Button
-                  size="sm"
-                  variant="outline"
-                  disabled={isUploading}
-                  onClick={() => fileInputRef.current?.click()}
-                >
-                  {isUploading ? (
-                    <Loader2 className="mr-1 h-4 w-4 animate-spin" />
-                  ) : (
-                    <Upload className="mr-1 h-4 w-4" />
-                  )}
-                  Upload
-                </Button>
+                <CardTitle className="flex items-center gap-2 text-base"><Paperclip className="h-4 w-4 text-muted-foreground" />Attachments<span className="rounded-full bg-muted px-1.5 text-xs font-semibold tabular-nums text-muted-foreground">{task.attachments.length}</span></CardTitle>
+                {task.attachments.length > 0 && (
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    disabled={isUploading}
+                    onClick={() => fileInputRef.current?.click()}
+                  >
+                    {isUploading ? (
+                      <Loader2 className="mr-1 h-4 w-4 animate-spin" />
+                    ) : (
+                      <Upload className="mr-1 h-4 w-4" />
+                    )}
+                    Add
+                  </Button>
+                )}
               </CardHeader>
               <CardContent>
                 <input
@@ -341,38 +354,62 @@ export default function TaskDetailPage() {
                   onChange={handleUpload}
                 />
                 {task.attachments.length === 0 ? (
-                  <p className="py-4 text-center text-sm text-muted-foreground">
-                    No files attached
-                  </p>
+                  <button
+                    type="button"
+                    onClick={() => fileInputRef.current?.click()}
+                    className="flex w-full flex-col items-center gap-1.5 rounded-lg border border-dashed py-6 text-center transition-colors hover:border-primary/40 hover:bg-muted/40"
+                  >
+                    <Upload className="h-5 w-5 text-muted-foreground" />
+                    <span className="text-sm font-medium">Drop files here</span>
+                    <span className="text-xs text-muted-foreground">
+                      or click to browse
+                    </span>
+                  </button>
                 ) : (
-                  <ul className="space-y-2">
-                    {task.attachments.map((attachment) => (
-                      <li
-                        key={attachment.id}
-                        className="flex items-center gap-3 rounded-lg border p-2"
-                      >
-                        <Paperclip className="h-4 w-4 shrink-0 text-muted-foreground" />
-                        <a
-                          href={attachment.url}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="min-w-0 flex-1 truncate text-sm hover:underline"
-                        >
-                          {attachment.filename}
-                        </a>
-                        <span className="shrink-0 text-xs text-muted-foreground">
-                          {(attachment.fileSize / 1024).toFixed(0)} KB
-                        </span>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="h-7 w-7 shrink-0"
-                          onClick={() => handleRemoveAttachment(attachment)}
-                        >
-                          <X className="h-4 w-4" />
-                        </Button>
-                      </li>
-                    ))}
+                  <ul className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+                    {task.attachments.map((attachment) => {
+                      const isImage = attachment.mimeType.startsWith("image/");
+                      return (
+                        <li key={attachment.id} className="group relative">
+                          <a
+                            href={attachment.url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="lift block overflow-hidden rounded-lg border bg-card"
+                          >
+                            {/* Images preview; everything else gets an icon tile. */}
+                            <div className="flex h-24 items-center justify-center overflow-hidden bg-muted/60">
+                              {isImage ? (
+                                // eslint-disable-next-line @next/next/no-img-element
+                                <img
+                                  src={attachment.url}
+                                  alt={attachment.filename}
+                                  className="h-full w-full object-cover"
+                                />
+                              ) : (
+                                <FileText className="h-7 w-7 text-muted-foreground" />
+                              )}
+                            </div>
+                            <div className="px-2 py-1.5">
+                              <p className="truncate text-xs font-medium">
+                                {attachment.filename}
+                              </p>
+                              <p className="text-[11px] text-muted-foreground">
+                                {(attachment.fileSize / 1024).toFixed(0)} KB
+                              </p>
+                            </div>
+                          </a>
+                          <button
+                            type="button"
+                            aria-label={`Remove ${attachment.filename}`}
+                            onClick={() => handleRemoveAttachment(attachment)}
+                            className="absolute right-1.5 top-1.5 rounded-md bg-background/90 p-1 opacity-0 shadow-sm transition-opacity group-hover:opacity-100 hover:text-destructive"
+                          >
+                            <X className="h-3.5 w-3.5" />
+                          </button>
+                        </li>
+                      );
+                    })}
                   </ul>
                 )}
               </CardContent>
@@ -380,7 +417,7 @@ export default function TaskDetailPage() {
 
             <Card>
               <CardHeader>
-                <CardTitle>Comments ({task.comments.length})</CardTitle>
+                <CardTitle className="flex items-center gap-2 text-base"><MessageSquare className="h-4 w-4 text-muted-foreground" />Comments<span className="rounded-full bg-muted px-1.5 text-xs font-semibold tabular-nums text-muted-foreground">{task.comments.length}</span></CardTitle>
               </CardHeader>
               <CardContent>
                 <CommentList
@@ -392,14 +429,14 @@ export default function TaskDetailPage() {
             </Card>
           </div>
 
-          <div className="space-y-6">
+          <div className="space-y-5 lg:sticky lg:top-6 lg:self-start">
             <Card>
-              <CardHeader>
-                <CardTitle>Details</CardTitle>
+              <CardHeader className="pb-3">
+                <CardTitle className="text-base">Details</CardTitle>
               </CardHeader>
               <CardContent className="space-y-4">
                 <div className="space-y-2">
-                  <label className="text-sm font-medium">Status</label>
+                  <label className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Status</label>
                   <Select
                     items={STATUS_ITEMS}
                     value={task.status}
@@ -419,7 +456,7 @@ export default function TaskDetailPage() {
                 </div>
 
                 <div className="space-y-2">
-                  <label className="text-sm font-medium">Priority</label>
+                  <label className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Priority</label>
                   <Select
                     items={PRIORITY_ITEMS}
                     value={task.priority}
@@ -441,7 +478,7 @@ export default function TaskDetailPage() {
                 <Separator />
 
                 <div className="space-y-2">
-                  <label className="text-sm font-medium">Assignee</label>
+                  <label className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Assignee</label>
                   <AssigneePicker
                     value={task.assigneeId}
                     onChange={(assigneeId) => patch({ assigneeId })}
@@ -451,8 +488,8 @@ export default function TaskDetailPage() {
                 <Separator />
 
                 <div className="space-y-2">
-                  <label className="text-sm font-medium" htmlFor="due">
-                    Due Date
+                  <label className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground" htmlFor="due">
+                    Due date
                   </label>
                   <Input
                     id="due"
@@ -467,7 +504,7 @@ export default function TaskDetailPage() {
                 <Separator />
 
                 <div className="space-y-2">
-                  <label className="text-sm font-medium">Created by</label>
+                  <label className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Created by</label>
                   {task.createdBy ? (
                     <UserChip user={task.createdBy} showEmail />
                   ) : (
@@ -483,7 +520,7 @@ export default function TaskDetailPage() {
             {task.tags.length > 0 && (
               <Card>
                 <CardHeader>
-                  <CardTitle>Tags</CardTitle>
+                  <CardTitle className="text-base">Tags</CardTitle>
                 </CardHeader>
                 <CardContent>
                   <div className="flex flex-wrap gap-2">

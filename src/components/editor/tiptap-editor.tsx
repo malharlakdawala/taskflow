@@ -108,7 +108,7 @@ export function TiptapEditor({
       }),
       Image.configure({
         HTMLAttributes: {
-          class: "max-w-full h-auto rounded-lg",
+          class: "max-w-full h-auto max-h-80 w-auto rounded-lg border object-contain",
         },
       }),
       TaskList,
@@ -126,7 +126,7 @@ export function TiptapEditor({
     editorProps: {
       attributes: {
         class: cn(
-          "prose prose-sm dark:prose-invert max-w-none focus:outline-none min-h-[160px] p-4",
+          "prose prose-sm dark:prose-invert max-w-none focus:outline-none min-h-[96px] px-4 py-3 prose-img:max-h-80 prose-img:rounded-lg prose-img:border",
           className
         ),
       },
@@ -242,163 +242,163 @@ export function TiptapEditor({
   };
 
   return (
-    <div className="border rounded-lg">
+    <div className="overflow-hidden rounded-lg border bg-background">
       {editable && (
-        <div className="flex flex-wrap items-center gap-1 p-2 border-b bg-muted/50">
+        <div className="flex flex-wrap items-center gap-0.5 border-b bg-muted/40 px-1.5 py-1">
           <Button
             variant="ghost"
             size="icon"
-            className="h-8 w-8"
+            className="h-7 w-7"
             onClick={() => editor.chain().focus().undo().run()}
             disabled={!editor.can().undo()}
           >
-            <Undo className="h-4 w-4" />
+            <Undo className="h-3.5 w-3.5" />
           </Button>
           <Button
             variant="ghost"
             size="icon"
-            className="h-8 w-8"
+            className="h-7 w-7"
             onClick={() => editor.chain().focus().redo().run()}
             disabled={!editor.can().redo()}
           >
-            <Redo className="h-4 w-4" />
+            <Redo className="h-3.5 w-3.5" />
           </Button>
 
-          <Separator orientation="vertical" className="h-6 mx-1" />
+          <Separator orientation="vertical" className="mx-1 h-5" />
 
           <Button
             variant="ghost"
             size="icon"
-            className="h-8 w-8"
+            className="h-7 w-7"
             onClick={() => editor.chain().focus().toggleBold().run()}
             data-active={editor.isActive("bold")}
           >
-            <Bold className="h-4 w-4" />
+            <Bold className="h-3.5 w-3.5" />
           </Button>
           <Button
             variant="ghost"
             size="icon"
-            className="h-8 w-8"
+            className="h-7 w-7"
             onClick={() => editor.chain().focus().toggleItalic().run()}
             data-active={editor.isActive("italic")}
           >
-            <Italic className="h-4 w-4" />
+            <Italic className="h-3.5 w-3.5" />
           </Button>
           <Button
             variant="ghost"
             size="icon"
-            className="h-8 w-8"
+            className="h-7 w-7"
             onClick={() => editor.chain().focus().toggleUnderline().run()}
             data-active={editor.isActive("underline")}
           >
-            <UnderlineIcon className="h-4 w-4" />
+            <UnderlineIcon className="h-3.5 w-3.5" />
           </Button>
           <Button
             variant="ghost"
             size="icon"
-            className="h-8 w-8"
+            className="h-7 w-7"
             onClick={() => editor.chain().focus().toggleStrike().run()}
             data-active={editor.isActive("strike")}
           >
-            <Strikethrough className="h-4 w-4" />
+            <Strikethrough className="h-3.5 w-3.5" />
           </Button>
 
-          <Separator orientation="vertical" className="h-6 mx-1" />
+          <Separator orientation="vertical" className="mx-1 h-5" />
 
           <Button
             variant="ghost"
             size="icon"
-            className="h-8 w-8"
+            className="h-7 w-7"
             onClick={() => editor.chain().focus().toggleHeading({ level: 1 }).run()}
             data-active={editor.isActive("heading", { level: 1 })}
           >
-            <Heading1 className="h-4 w-4" />
+            <Heading1 className="h-3.5 w-3.5" />
           </Button>
           <Button
             variant="ghost"
             size="icon"
-            className="h-8 w-8"
+            className="h-7 w-7"
             onClick={() => editor.chain().focus().toggleHeading({ level: 2 }).run()}
             data-active={editor.isActive("heading", { level: 2 })}
           >
-            <Heading2 className="h-4 w-4" />
+            <Heading2 className="h-3.5 w-3.5" />
           </Button>
           <Button
             variant="ghost"
             size="icon"
-            className="h-8 w-8"
+            className="h-7 w-7"
             onClick={() => editor.chain().focus().toggleHeading({ level: 3 }).run()}
             data-active={editor.isActive("heading", { level: 3 })}
           >
-            <Heading3 className="h-4 w-4" />
+            <Heading3 className="h-3.5 w-3.5" />
           </Button>
 
-          <Separator orientation="vertical" className="h-6 mx-1" />
+          <Separator orientation="vertical" className="mx-1 h-5" />
 
           <Button
             variant="ghost"
             size="icon"
-            className="h-8 w-8"
+            className="h-7 w-7"
             onClick={() => editor.chain().focus().toggleBulletList().run()}
             data-active={editor.isActive("bulletList")}
           >
-            <List className="h-4 w-4" />
+            <List className="h-3.5 w-3.5" />
           </Button>
           <Button
             variant="ghost"
             size="icon"
-            className="h-8 w-8"
+            className="h-7 w-7"
             onClick={() => editor.chain().focus().toggleOrderedList().run()}
             data-active={editor.isActive("orderedList")}
           >
-            <ListOrdered className="h-4 w-4" />
+            <ListOrdered className="h-3.5 w-3.5" />
           </Button>
           <Button
             variant="ghost"
             size="icon"
-            className="h-8 w-8"
+            className="h-7 w-7"
             onClick={() => editor.chain().focus().toggleTaskList().run()}
             data-active={editor.isActive("taskList")}
           >
-            <ListChecks className="h-4 w-4" />
+            <ListChecks className="h-3.5 w-3.5" />
           </Button>
 
-          <Separator orientation="vertical" className="h-6 mx-1" />
+          <Separator orientation="vertical" className="mx-1 h-5" />
 
           <Button
             variant="ghost"
             size="icon"
-            className="h-8 w-8"
+            className="h-7 w-7"
             onClick={() => editor.chain().focus().toggleCodeBlock().run()}
             data-active={editor.isActive("codeBlock")}
           >
-            <Code className="h-4 w-4" />
+            <Code className="h-3.5 w-3.5" />
           </Button>
           <Button
             variant="ghost"
             size="icon"
-            className="h-8 w-8"
+            className="h-7 w-7"
             onClick={() => editor.chain().focus().toggleBlockquote().run()}
             data-active={editor.isActive("blockquote")}
           >
-            <Quote className="h-4 w-4" />
+            <Quote className="h-3.5 w-3.5" />
           </Button>
 
-          <Separator orientation="vertical" className="h-6 mx-1" />
+          <Separator orientation="vertical" className="mx-1 h-5" />
 
           <Button
             variant="ghost"
             size="icon"
-            className="h-8 w-8"
+            className="h-7 w-7"
             onClick={addLink}
             data-active={editor.isActive("link")}
           >
-            <LinkIcon className="h-4 w-4" />
+            <LinkIcon className="h-3.5 w-3.5" />
           </Button>
           <Button
             variant="ghost"
             size="icon"
-            className="h-8 w-8"
+            className="h-7 w-7"
             onClick={addImage}
             disabled={isUploading}
             title="Insert image — you can also paste or drag one in"
@@ -407,58 +407,58 @@ export function TiptapEditor({
             {isUploading ? (
               <Loader2 className="h-4 w-4 animate-spin" />
             ) : (
-              <ImageIcon className="h-4 w-4" />
+              <ImageIcon className="h-3.5 w-3.5" />
             )}
           </Button>
           <Button
             variant="ghost"
             size="icon"
-            className="h-8 w-8"
+            className="h-7 w-7"
             onClick={() => editor.chain().focus().toggleHighlight().run()}
             data-active={editor.isActive("highlight")}
           >
-            <Highlighter className="h-4 w-4" />
+            <Highlighter className="h-3.5 w-3.5" />
           </Button>
 
-          <Separator orientation="vertical" className="h-6 mx-1" />
+          <Separator orientation="vertical" className="mx-1 h-5" />
 
           <Button
             variant="ghost"
             size="icon"
-            className="h-8 w-8"
+            className="h-7 w-7"
             onClick={() => editor.chain().focus().setTextAlign("left").run()}
             data-active={editor.isActive({ textAlign: "left" })}
           >
-            <AlignLeft className="h-4 w-4" />
+            <AlignLeft className="h-3.5 w-3.5" />
           </Button>
           <Button
             variant="ghost"
             size="icon"
-            className="h-8 w-8"
+            className="h-7 w-7"
             onClick={() => editor.chain().focus().setTextAlign("center").run()}
             data-active={editor.isActive({ textAlign: "center" })}
           >
-            <AlignCenter className="h-4 w-4" />
+            <AlignCenter className="h-3.5 w-3.5" />
           </Button>
           <Button
             variant="ghost"
             size="icon"
-            className="h-8 w-8"
+            className="h-7 w-7"
             onClick={() => editor.chain().focus().setTextAlign("right").run()}
             data-active={editor.isActive({ textAlign: "right" })}
           >
-            <AlignRight className="h-4 w-4" />
+            <AlignRight className="h-3.5 w-3.5" />
           </Button>
 
-          <Separator orientation="vertical" className="h-6 mx-1" />
+          <Separator orientation="vertical" className="mx-1 h-5" />
 
           <Button
             variant="ghost"
             size="icon"
-            className="h-8 w-8"
+            className="h-7 w-7"
             onClick={addTable}
           >
-            <TableIcon className="h-4 w-4" />
+            <TableIcon className="h-3.5 w-3.5" />
           </Button>
         </div>
       )}
@@ -470,7 +470,7 @@ export function TiptapEditor({
         hidden
         onChange={handleFileInput}
       />
-      <EditorContent editor={editor} className="min-h-[200px]" />
+      <EditorContent editor={editor} />
       {isUploading && (
         <p className="flex items-center gap-2 border-t px-4 py-2 text-xs text-muted-foreground">
           <Loader2 className="h-3 w-3 animate-spin" />

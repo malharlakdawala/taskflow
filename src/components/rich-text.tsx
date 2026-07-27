@@ -18,7 +18,7 @@ export function RichText({
     <div
       className={cn(
         "prose prose-sm dark:prose-invert max-w-none",
-        "prose-img:rounded-lg prose-img:max-w-full prose-img:h-auto",
+        "prose-img:rounded-lg prose-img:border prose-img:max-w-full prose-img:h-auto prose-img:max-h-72 prose-img:object-contain",
         "prose-a:text-primary prose-pre:bg-muted prose-pre:text-foreground",
         className
       )}
