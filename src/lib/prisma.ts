@@ -14,8 +14,9 @@ function createPrismaClient() {
 
   if (!connectionString) {
     throw new Error(
-      "DATABASE_URL is not set. Copy .env.example to .env.local and fill in the " +
-        "Supabase connection string (Dashboard → Connect → ORMs → Prisma)."
+      "DATABASE_URL is not set. Locally: copy .env.example to .env.local and fill " +
+        "in the Supabase connection string (Dashboard → Connect → ORMs → Prisma). " +
+        "On Vercel: add it under Settings → Environment Variables."
     );
   }
 
@@ -23,8 +24,23 @@ function createPrismaClient() {
   return new PrismaClient({ adapter });
 }
 
-export const prisma = globalForPrisma.prisma ?? createPrismaClient();
-
-if (process.env.NODE_ENV !== "production") {
-  globalForPrisma.prisma = prisma;
+function getClient(): PrismaClient {
+  if (!globalForPrisma.prisma) {
+    globalForPrisma.prisma = createPrismaClient();
+  }
+  return globalForPrisma.prisma;
 }
+
+/**
+ * Deliberately lazy. `next build` imports every route module to collect page
+ * data, so constructing the client at module scope would turn a missing
+ * DATABASE_URL into a build failure rather than a request-time error. The proxy
+ * defers construction until the first actual query.
+ */
+export const prisma = new Proxy({} as PrismaClient, {
+  get(_target, property) {
+    const client = getClient();
+    const value = Reflect.get(client, property);
+    return typeof value === "function" ? value.bind(client) : value;
+  },
+});
