@@ -83,6 +83,9 @@ fresh project, replay the migrations in `supabase/migrations/` in order.
 
 - All application tables have RLS enabled; `anon` has no grants at all, and the
   `taskflow` schema is not exposed to the Data API.
+- Attachment URLs are public and unguessable (uuid-prefixed), but the bucket
+  cannot be listed — there is no SELECT policy on `storage.objects`, so nobody
+  can enumerate uploads. Writes are confined to the uploader's own `<uid>/` prefix.
 - The workspace is **shared** — every signed-in user can see and edit every
   task. Comments can only be edited or deleted by their author.
 - Because signing up grants full access, keep sign-ups closed or restricted in
