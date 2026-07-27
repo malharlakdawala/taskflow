@@ -1,13 +1,10 @@
 "use client";
 
-import { Card, CardContent } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
 import { Calendar, MessageSquare, Paperclip } from "lucide-react";
 import Link from "next/link";
 import type { Task } from "@/lib/types";
-import { PRIORITY_CONFIG } from "@/lib/types";
-import { cn, toPlainText } from "@/lib/utils";
-import { UserChip } from "@/components/tasks/user-chip";
+import { cn, toPlainText, initialsFor, displayName } from "@/lib/utils";
+import { PriorityBadge } from "@/components/tasks/status-badge";
 
 interface TaskCardProps {
   task: Task;
@@ -16,93 +13,89 @@ interface TaskCardProps {
 }
 
 export function TaskCard({ task, isDragging }: TaskCardProps) {
-  const priorityConfig = PRIORITY_CONFIG[task.priority];
   const preview = toPlainText(task.description);
-
   const due = task.dueDate ? new Date(task.dueDate) : null;
   const isOverdue = due !== null && due < new Date() && task.status !== "DONE";
+  const isDone = task.status === "DONE";
 
   return (
-    <Link href={`/tasks/${task.id}`}>
-      <Card
+    <Link href={`/tasks/${task.id}`} className="block focus:outline-none">
+      <article
+        data-status={task.status}
         className={cn(
-          "cursor-pointer transition-shadow hover:shadow-md",
-          isDragging && "shadow-lg rotate-2"
+          "tone-rail lift group rounded-xl border bg-card p-3 pl-4",
+          "focus-within:ring-2 focus-within:ring-ring/40",
+          isDragging && "rotate-1 shadow-xl ring-2 ring-primary/30"
         )}
       >
-        <CardContent className="p-4">
-          <div className="space-y-2">
-            <div className="flex items-start justify-between gap-2">
-              <h3 className="font-medium line-clamp-2">{task.title}</h3>
-              {task.priority !== "NONE" && (
-                <span
-                  className={cn(
-                    "shrink-0 text-xs font-medium",
-                    priorityConfig.color
-                  )}
-                >
-                  {priorityConfig.label}
-                </span>
-              )}
-            </div>
+        {/* Signature: the colour spine telling you the state without reading. */}
+        <span className="tone-rail-bar" aria-hidden />
 
-            {preview && (
-              <p className="text-sm text-muted-foreground line-clamp-2">
-                {preview}
-              </p>
+        <div className="flex items-start justify-between gap-2">
+          <h3
+            className={cn(
+              "text-sm font-medium leading-snug line-clamp-2",
+              "transition-colors group-hover:text-primary",
+              isDone && "text-muted-foreground line-through decoration-1"
             )}
+          >
+            {task.title}
+          </h3>
+          <PriorityBadge
+            priority={task.priority}
+            showLabel={false}
+            className="mt-0.5 shrink-0"
+          />
+        </div>
 
-            <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
-              {due && (
-                <span
-                  className={cn(
-                    "flex items-center gap-1",
-                    isOverdue && "font-medium text-destructive"
-                  )}
-                >
-                  <Calendar className="h-3 w-3" />
-                  {due.toLocaleDateString()}
-                </span>
-              )}
-              {task.commentCount > 0 && (
-                <span className="flex items-center gap-1">
-                  <MessageSquare className="h-3 w-3" />
-                  {task.commentCount}
-                </span>
-              )}
-              {task.attachmentCount > 0 && (
-                <span className="flex items-center gap-1">
-                  <Paperclip className="h-3 w-3" />
-                  {task.attachmentCount}
-                </span>
-              )}
-            </div>
+        {preview && (
+          <p className="mt-1.5 line-clamp-2 text-xs leading-relaxed text-muted-foreground">
+            {preview}
+          </p>
+        )}
 
-            {task.assignee && (
-              <UserChip user={task.assignee} className="pt-1" />
+        <div className="mt-3 flex items-center justify-between gap-2">
+          <div className="flex min-w-0 items-center gap-2.5 text-[11px] text-muted-foreground">
+            {due && (
+              <span
+                className={cn(
+                  "inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 font-medium",
+                  isOverdue
+                    ? "bg-destructive/10 text-destructive"
+                    : "bg-muted"
+                )}
+              >
+                <Calendar className="h-3 w-3" />
+                {due.toLocaleDateString(undefined, {
+                  day: "numeric",
+                  month: "short",
+                })}
+              </span>
             )}
-
-            {task.tags.length > 0 && (
-              <div className="flex flex-wrap gap-1">
-                {task.tags.map((tag) => (
-                  <Badge
-                    key={tag.id}
-                    variant="secondary"
-                    className="text-xs"
-                    style={
-                      tag.tag.color
-                        ? { backgroundColor: tag.tag.color }
-                        : undefined
-                    }
-                  >
-                    {tag.tag.name}
-                  </Badge>
-                ))}
-              </div>
+            {task.commentCount > 0 && (
+              <span className="inline-flex items-center gap-1">
+                <MessageSquare className="h-3 w-3" />
+                {task.commentCount}
+              </span>
+            )}
+            {task.attachmentCount > 0 && (
+              <span className="inline-flex items-center gap-1">
+                <Paperclip className="h-3 w-3" />
+                {task.attachmentCount}
+              </span>
             )}
           </div>
-        </CardContent>
-      </Card>
+
+          {task.assignee && (
+            <span
+              title={displayName(task.assignee)}
+              className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-primary/12 text-[10px] font-bold text-primary ring-1 ring-primary/20"
+            >
+              {initialsFor(task.assignee)}
+            </span>
+          )}
+        </div>
+      </article>
     </Link>
   );
 }

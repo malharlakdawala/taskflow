@@ -1,14 +1,39 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Plus, TrendingUp, Clock, CheckCircle, AlertCircle } from "lucide-react";
+import { Skeleton } from "@/components/ui/skeleton";
+import {
+  Plus,
+  Layers,
+  Flame,
+  Timer,
+  CheckCircle2,
+  CalendarClock,
+  ArrowRight,
+} from "lucide-react";
 import Link from "next/link";
 import { CreateTaskDialog } from "@/components/tasks/create-task-dialog";
+import { StatusBadge, PriorityBadge } from "@/components/tasks/status-badge";
+import { notify } from "@/lib/notify";
 import type { Task, TaskStatus, TaskPriority } from "@/lib/types";
-import { STATUS_CONFIG, PRIORITY_CONFIG } from "@/lib/types";
+import { STATUS_ITEMS, PRIORITY_ITEMS } from "@/lib/types";
+
+const STATUS_ORDER: TaskStatus[] = [
+  "BACKLOG",
+  "TODO",
+  "IN_PROGRESS",
+  "IN_REVIEW",
+  "DONE",
+];
+const PRIORITY_ORDER: TaskPriority[] = [
+  "URGENT",
+  "HIGH",
+  "MEDIUM",
+  "LOW",
+  "NONE",
+];
 
 export default function DashboardPage() {
   const [tasks, setTasks] = useState<Task[]>([]);
@@ -26,6 +51,7 @@ export default function DashboardPage() {
         if (!cancelled) setTasks(data);
       } catch (error) {
         console.error("Failed to fetch tasks:", error);
+        if (!cancelled) notify.error("Could not load your dashboard");
       } finally {
         if (!cancelled) setIsLoading(false);
       }
@@ -37,223 +63,185 @@ export default function DashboardPage() {
     };
   }, []);
 
-  const handleTaskCreated = (task: Task) => {
-    setTasks(prev => [task, ...prev]);
-  };
+  const stats = useMemo(() => {
+    const byStatus = {} as Record<TaskStatus, number>;
+    const byPriority = {} as Record<TaskPriority, number>;
+    for (const task of tasks) {
+      byStatus[task.status] = (byStatus[task.status] ?? 0) + 1;
+      byPriority[task.priority] = (byPriority[task.priority] ?? 0) + 1;
+    }
 
-  // Calculate stats
-  const totalTasks = tasks.length;
-  const tasksByStatus = tasks.reduce((acc, task) => {
-    acc[task.status] = (acc[task.status] || 0) + 1;
-    return acc;
-  }, {} as Record<TaskStatus, number>);
+    const now = new Date();
+    const upcoming = tasks
+      .filter((t) => t.dueDate && new Date(t.dueDate) > now && t.status !== "DONE")
+      .sort(
+        (a, b) => new Date(a.dueDate!).getTime() - new Date(b.dueDate!).getTime()
+      )
+      .slice(0, 5);
+    const overdue = tasks.filter(
+      (t) => t.dueDate && new Date(t.dueDate) < now && t.status !== "DONE"
+    ).length;
 
-  const tasksByPriority = tasks.reduce((acc, task) => {
-    acc[task.priority] = (acc[task.priority] || 0) + 1;
-    return acc;
-  }, {} as Record<TaskPriority, number>);
+    return { byStatus, byPriority, upcoming, overdue };
+  }, [tasks]);
 
-  const urgentTasks = tasks.filter(t => t.priority === "URGENT").length;
-  const completedTasks = tasksByStatus["DONE"] || 0;
-  const inProgressTasks = tasksByStatus["IN_PROGRESS"] || 0;
-
-  const upcomingTasks = tasks
-    .filter(t => t.dueDate && new Date(t.dueDate) > new Date())
-    .sort((a, b) => new Date(a.dueDate!).getTime() - new Date(b.dueDate!).getTime())
-    .slice(0, 5);
+  const total = tasks.length;
+  const done = stats.byStatus.DONE ?? 0;
+  const inProgress = stats.byStatus.IN_PROGRESS ?? 0;
+  const urgent = stats.byPriority.URGENT ?? 0;
+  const completion = total > 0 ? Math.round((done / total) * 100) : 0;
 
   if (isLoading) {
     return (
-      <div className="flex items-center justify-center h-full">
-        <div className="text-muted-foreground">Loading dashboard...</div>
+      <div className="space-y-6 p-6">
+        <Skeleton className="h-10 w-64" />
+        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+          {Array.from({ length: 4 }).map((_, i) => (
+            <Skeleton key={i} className="h-28 rounded-xl" />
+          ))}
+        </div>
+        <Skeleton className="h-64 rounded-xl" />
       </div>
     );
   }
 
   return (
-    <div className="h-full overflow-auto p-6 space-y-6">
-      <div className="flex items-center justify-between">
+    <div className="enter h-full space-y-6 overflow-auto p-6">
+      <div className="flex flex-wrap items-end justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold">Dashboard</h1>
-          <p className="text-muted-foreground">Overview of your tasks and progress</p>
+          <h1 className="text-3xl font-bold tracking-tight">{greeting()}</h1>
+          <p className="mt-1 text-sm text-muted-foreground">
+            {total === 0
+              ? "Nothing on your plate yet."
+              : `${total - done} open · ${done} done${
+                  stats.overdue > 0 ? ` · ${stats.overdue} overdue` : ""
+                }`}
+          </p>
         </div>
-        <Button onClick={() => setIsCreateDialogOpen(true)}>
-          <Plus className="h-4 w-4 mr-2" />
-          New Task
+        <Button onClick={() => setIsCreateDialogOpen(true)} className="gap-2">
+          <Plus className="h-4 w-4" />
+          New task
         </Button>
       </div>
 
-      {/* Stats Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-4">
+        <StatCard
+          label="Total tasks"
+          value={total}
+          hint={`${completion}% complete`}
+          icon={Layers}
+          tone="var(--primary)"
+        />
+        <StatCard
+          label="Urgent"
+          value={urgent}
+          hint={urgent > 0 ? "Needs attention now" : "Nothing on fire"}
+          icon={Flame}
+          tone="var(--priority-urgent)"
+        />
+        <StatCard
+          label="In progress"
+          value={inProgress}
+          hint="Being worked on"
+          icon={Timer}
+          tone="var(--status-progress)"
+        />
+        <StatCard
+          label="Completed"
+          value={done}
+          hint={`${completion}% of all tasks`}
+          icon={CheckCircle2}
+          tone="var(--status-done)"
+        />
+      </div>
+
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
         <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Total Tasks</CardTitle>
-            <TrendingUp className="h-4 w-4 text-muted-foreground" />
+          <CardHeader className="pb-3">
+            <CardTitle className="text-base">By status</CardTitle>
           </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{totalTasks}</div>
-            <p className="text-xs text-muted-foreground">
-              {completedTasks} completed, {inProgressTasks} in progress
-            </p>
+          <CardContent className="space-y-3">
+            {STATUS_ORDER.map((status) => (
+              <Meter
+                key={status}
+                attr={{ "data-status": status }}
+                label={STATUS_ITEMS[status]}
+                count={stats.byStatus[status] ?? 0}
+                total={total}
+              />
+            ))}
           </CardContent>
         </Card>
 
         <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Urgent Tasks</CardTitle>
-            <AlertCircle className="h-4 w-4 text-red-500" />
+          <CardHeader className="pb-3">
+            <CardTitle className="text-base">By priority</CardTitle>
           </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold text-red-500">{urgentTasks}</div>
-            <p className="text-xs text-muted-foreground">
-              Need immediate attention
-            </p>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">In Progress</CardTitle>
-            <Clock className="h-4 w-4 text-yellow-500" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold text-yellow-500">{inProgressTasks}</div>
-            <p className="text-xs text-muted-foreground">
-              Currently being worked on
-            </p>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Completed</CardTitle>
-            <CheckCircle className="h-4 w-4 text-green-500" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold text-green-500">{completedTasks}</div>
-            <p className="text-xs text-muted-foreground">
-              {totalTasks > 0 ? Math.round((completedTasks / totalTasks) * 100) : 0}% completion rate
-            </p>
+          <CardContent className="space-y-3">
+            {PRIORITY_ORDER.map((priority) => (
+              <Meter
+                key={priority}
+                attr={{ "data-priority": priority }}
+                label={PRIORITY_ITEMS[priority]}
+                count={stats.byPriority[priority] ?? 0}
+                total={total}
+              />
+            ))}
           </CardContent>
         </Card>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Tasks by Status */}
-        <Card>
-          <CardHeader>
-            <CardTitle>Tasks by Status</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-3">
-              {Object.entries(STATUS_CONFIG).map(([status, config]) => {
-                const count = tasksByStatus[status as TaskStatus] || 0;
-                const percentage = totalTasks > 0 ? (count / totalTasks) * 100 : 0;
-                
-                return (
-                  <div key={status} className="space-y-1">
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-2">
-                        <div className={`h-3 w-3 rounded-full ${config.color}`} />
-                        <span className="text-sm font-medium">{config.label}</span>
-                      </div>
-                      <span className="text-sm text-muted-foreground">{count}</span>
-                    </div>
-                    <div className="h-2 bg-muted rounded-full overflow-hidden">
-                      <div
-                        className={`h-full ${config.color} transition-all`}
-                        style={{ width: `${percentage}%` }}
-                      />
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          </CardContent>
-        </Card>
-
-        {/* Tasks by Priority */}
-        <Card>
-          <CardHeader>
-            <CardTitle>Tasks by Priority</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-3">
-              {Object.entries(PRIORITY_CONFIG).map(([priority, config]) => {
-                const count = tasksByPriority[priority as TaskPriority] || 0;
-                const percentage = totalTasks > 0 ? (count / totalTasks) * 100 : 0;
-                
-                return (
-                  <div key={priority} className="space-y-1">
-                    <div className="flex items-center justify-between">
-                      <span className={`text-sm font-medium ${config.color}`}>
-                        {config.label}
-                      </span>
-                      <span className="text-sm text-muted-foreground">{count}</span>
-                    </div>
-                    <div className="h-2 bg-muted rounded-full overflow-hidden">
-                      <div
-                        className={`h-full ${config.color.replace('text-', 'bg-')} transition-all`}
-                        style={{ width: `${percentage}%` }}
-                      />
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          </CardContent>
-        </Card>
-      </div>
-
-      {/* Upcoming Tasks */}
       <Card>
-        <CardHeader>
-          <div className="flex items-center justify-between">
-            <CardTitle>Upcoming Tasks</CardTitle>
-            <Link href="/calendar">
-              <Button variant="ghost" size="sm">View Calendar</Button>
-            </Link>
-          </div>
+        <CardHeader className="flex-row items-center justify-between space-y-0 pb-3">
+          <CardTitle className="text-base">Coming up</CardTitle>
+          <Link
+            href="/calendar"
+            className="inline-flex items-center gap-1 text-sm text-muted-foreground transition-colors hover:text-primary"
+          >
+            Calendar
+            <ArrowRight className="h-3.5 w-3.5" />
+          </Link>
         </CardHeader>
         <CardContent>
-          {upcomingTasks.length === 0 ? (
-            <p className="text-sm text-muted-foreground text-center py-4">
-              No upcoming tasks
-            </p>
+          {stats.upcoming.length === 0 ? (
+            <div className="flex flex-col items-center gap-2 py-8 text-center">
+              <span className="flex h-11 w-11 items-center justify-center rounded-full bg-muted">
+                <CalendarClock className="h-5 w-5 text-muted-foreground" />
+              </span>
+              <p className="font-display text-base font-semibold">
+                No deadlines ahead
+              </p>
+              <p className="text-sm text-muted-foreground">
+                Tasks with a due date will appear here.
+              </p>
+            </div>
           ) : (
             <div className="space-y-2">
-              {upcomingTasks.map(task => {
-                const statusConfig = STATUS_CONFIG[task.status];
-                const priorityConfig = PRIORITY_CONFIG[task.priority];
-                
-                return (
-                  <Link
-                    key={task.id}
-                    href={`/tasks/${task.id}`}
-                    className="flex items-center justify-between p-3 rounded-lg border hover:bg-muted transition-colors"
-                  >
-                    <div className="flex items-center gap-3">
-                      <div className={`h-3 w-3 rounded-full ${statusConfig.color}`} />
-                      <div>
-                        <h3 className="font-medium text-sm">{task.title}</h3>
-                        <p className="text-xs text-muted-foreground">
-                          Due {new Date(task.dueDate!).toLocaleDateString()}
-                        </p>
-                      </div>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      {task.priority !== "NONE" && (
-                        <Badge variant="outline" className={`text-xs ${priorityConfig.color}`}>
-                          {priorityConfig.label}
-                        </Badge>
-                      )}
-                      <Badge variant="outline" className={`text-xs ${statusConfig.color}`}>
-                        {statusConfig.label}
-                      </Badge>
-                    </div>
-                  </Link>
-                );
-              })}
+              {stats.upcoming.map((task) => (
+                <Link
+                  key={task.id}
+                  href={`/tasks/${task.id}`}
+                  data-status={task.status}
+                  className="tone-rail lift flex items-center justify-between gap-3 rounded-lg border bg-card p-3 pl-4"
+                >
+                  <span className="tone-rail-bar" aria-hidden />
+                  <div className="min-w-0">
+                    <p className="truncate text-sm font-medium">{task.title}</p>
+                    <p className="text-xs text-muted-foreground">
+                      Due{" "}
+                      {new Date(task.dueDate!).toLocaleDateString(undefined, {
+                        weekday: "short",
+                        day: "numeric",
+                        month: "short",
+                      })}
+                    </p>
+                  </div>
+                  <div className="flex shrink-0 items-center gap-2">
+                    <PriorityBadge priority={task.priority} showLabel={false} />
+                    <StatusBadge status={task.status} />
+                  </div>
+                </Link>
+              ))}
             </div>
           )}
         </CardContent>
@@ -262,8 +250,94 @@ export default function DashboardPage() {
       <CreateTaskDialog
         open={isCreateDialogOpen}
         onOpenChange={setIsCreateDialogOpen}
-        onTaskCreated={handleTaskCreated}
+        onTaskCreated={(task) => setTasks((prev) => [task, ...prev])}
       />
+    </div>
+  );
+}
+
+function greeting() {
+  const hour = new Date().getHours();
+  if (hour < 12) return "Good morning";
+  if (hour < 18) return "Good afternoon";
+  return "Good evening";
+}
+
+function StatCard({
+  label,
+  value,
+  hint,
+  icon: Icon,
+  tone,
+}: {
+  label: string;
+  value: number;
+  hint: string;
+  icon: React.ComponentType<{ className?: string }>;
+  tone: string;
+}) {
+  return (
+    <Card
+      className="lift relative overflow-hidden"
+      style={{ ["--tone" as string]: tone }}
+    >
+      {/* Each tile is topped by its own metric's colour so the four read apart. */}
+      <span
+        aria-hidden
+        className="absolute inset-x-0 top-0 h-0.5 bg-[var(--tone)]"
+      />
+      <CardContent className="flex items-start justify-between gap-3 p-5">
+        <div className="min-w-0">
+          <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+            {label}
+          </p>
+          <p className="font-display mt-1.5 text-3xl font-bold leading-none tabular-nums">
+            {value}
+          </p>
+          <p className="mt-1.5 truncate text-xs text-muted-foreground">{hint}</p>
+        </div>
+        <span
+          className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg"
+          style={{
+            backgroundColor: "color-mix(in oklch, var(--tone) 14%, transparent)",
+            color: "var(--tone)",
+          }}
+        >
+          <Icon className="h-[18px] w-[18px]" />
+        </span>
+      </CardContent>
+    </Card>
+  );
+}
+
+function Meter({
+  attr,
+  label,
+  count,
+  total,
+}: {
+  attr: Record<string, string>;
+  label: string;
+  count: number;
+  total: number;
+}) {
+  const percentage = total > 0 ? (count / total) * 100 : 0;
+
+  return (
+    <div {...attr} className="space-y-1.5">
+      <div className="flex items-center justify-between text-sm">
+        <span className="flex items-center gap-2 font-medium">
+          <span className="h-2 w-2 rounded-full bg-[var(--tone)]" />
+          {label}
+        </span>
+        <span className="tabular-nums text-muted-foreground">{count}</span>
+      </div>
+      <div className="h-1.5 overflow-hidden rounded-full bg-muted">
+        <div
+          className="h-full rounded-full bg-[var(--tone)] transition-[width] duration-500 ease-out"
+          style={{ width: `${percentage}%` }}
+        />
+      </div>
     </div>
   );
 }

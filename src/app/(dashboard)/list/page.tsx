@@ -9,18 +9,18 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Plus, ArrowUpDown } from "lucide-react";
+import { Plus, ArrowUpDown, ListTodo, Calendar, MessageSquare, Paperclip } from "lucide-react";
 import Link from "next/link";
 import { CreateTaskDialog } from "@/components/tasks/create-task-dialog";
 import { BulkActionBar } from "@/components/tasks/bulk-action-bar";
 import { UserChip } from "@/components/tasks/user-chip";
+import { StatusBadge, PriorityBadge } from "@/components/tasks/status-badge";
 import { notify } from "@/lib/notify";
+import { cn } from "@/lib/utils";
 import type { Task } from "@/lib/types";
-import { STATUS_CONFIG, PRIORITY_CONFIG } from "@/lib/types";
 
 type SortField = "title" | "status" | "priority" | "dueDate" | "createdAt";
 
@@ -115,25 +115,27 @@ export default function ListPage() {
 
   return (
     <div className="h-full flex flex-col">
-      <div className="flex items-center justify-between p-6 border-b">
+      <header className="flex items-center justify-between border-b bg-card/60 px-6 py-4 backdrop-blur">
         <div>
-          <h1 className="text-2xl font-bold">List View</h1>
-          <p className="text-muted-foreground">
-            Select rows to edit several tasks at once
+          <h1 className="text-2xl font-bold tracking-tight">List</h1>
+          <p className="text-sm text-muted-foreground">
+            {selected.size > 0
+              ? `${selected.size} selected`
+              : `${sortedTasks.length} ${sortedTasks.length === 1 ? "task" : "tasks"} · tick rows to edit in bulk`}
           </p>
         </div>
-        <Button onClick={() => setIsCreateDialogOpen(true)}>
-          <Plus className="h-4 w-4 mr-2" />
-          New Task
+        <Button onClick={() => setIsCreateDialogOpen(true)} className="gap-2">
+          <Plus className="h-4 w-4" />
+          New task
         </Button>
-      </div>
+      </header>
 
-      <div className="flex-1 overflow-auto p-6 pb-24">
-        <div className="border rounded-lg">
+      <div className="flex-1 overflow-auto px-6 py-5 pb-24">
+        <div className="overflow-hidden rounded-xl border bg-card">
           <Table>
             <TableHeader>
-              <TableRow>
-                <TableHead className="w-[44px]">
+              <TableRow className="hover:bg-transparent">
+                <TableHead className="w-[44px] pl-4">
                   <Checkbox
                     checked={allSelected}
                     indeterminate={someSelected}
@@ -141,53 +143,86 @@ export default function ListPage() {
                     aria-label="Select all tasks"
                   />
                 </TableHead>
-                <TableHead className="w-[300px]">
-                  <Button
-                    variant="ghost"
-                    className="h-auto p-0 font-medium"
+                <TableHead className="min-w-[280px]">
+                  <button
+                    type="button"
+                    className="inline-flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground transition-colors hover:text-foreground"
                     onClick={() => handleSort("title")}
                   >
-                    Title
-                    <ArrowUpDown className="ml-2 h-4 w-4" />
-                  </Button>
+                    Task
+                    <ArrowUpDown className="h-3 w-3" />
+                  </button>
                 </TableHead>
-                <TableHead>Status</TableHead>
-                <TableHead>Priority</TableHead>
-                <TableHead>Assignee</TableHead>
-                <TableHead>
-                  <Button
-                    variant="ghost"
-                    className="h-auto p-0 font-medium"
+                <TableHead className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+                  Status
+                </TableHead>
+                <TableHead className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+                  Priority
+                </TableHead>
+                <TableHead className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+                  Assignee
+                </TableHead>
+                <TableHead className="pr-4">
+                  <button
+                    type="button"
+                    className="inline-flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground transition-colors hover:text-foreground"
                     onClick={() => handleSort("dueDate")}
                   >
-                    Due Date
-                    <ArrowUpDown className="ml-2 h-4 w-4" />
-                  </Button>
+                    Due
+                    <ArrowUpDown className="h-3 w-3" />
+                  </button>
                 </TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {sortedTasks.length === 0 ? (
-                <TableRow>
-                  <TableCell
-                    colSpan={6}
-                    className="py-10 text-center text-muted-foreground"
-                  >
-                    No tasks yet
+                <TableRow className="hover:bg-transparent">
+                  <TableCell colSpan={6} className="py-16">
+                    <div className="flex flex-col items-center gap-2 text-center">
+                      <span className="flex h-11 w-11 items-center justify-center rounded-full bg-muted">
+                        <ListTodo className="h-5 w-5 text-muted-foreground" />
+                      </span>
+                      <p className="font-display text-base font-semibold">
+                        No tasks yet
+                      </p>
+                      <p className="max-w-xs text-sm text-muted-foreground">
+                        Create your first task and it will show up here.
+                      </p>
+                      <Button
+                        size="sm"
+                        className="mt-2 gap-2"
+                        onClick={() => setIsCreateDialogOpen(true)}
+                      >
+                        <Plus className="h-4 w-4" />
+                        New task
+                      </Button>
+                    </div>
                   </TableCell>
                 </TableRow>
               ) : (
                 sortedTasks.map((task) => {
-                  const statusConfig = STATUS_CONFIG[task.status];
-                  const priorityConfig = PRIORITY_CONFIG[task.priority];
                   const isSelected = selected.has(task.id);
+                  const due = task.dueDate ? new Date(task.dueDate) : null;
+                  const isOverdue =
+                    due !== null && due < new Date() && task.status !== "DONE";
 
                   return (
                     <TableRow
                       key={task.id}
+                      data-status={task.status}
                       data-state={isSelected ? "selected" : undefined}
+                      className={cn(
+                        "group relative transition-colors",
+                        isSelected && "bg-primary/[0.06]"
+                      )}
                     >
-                      <TableCell>
+                      <TableCell className="relative pl-4">
+                        {/* Same colour spine as the board cards. */}
+                        <span
+                          aria-hidden
+                          className="absolute inset-y-0 left-0 w-[3px] bg-[var(--tone)] opacity-0 transition-opacity group-hover:opacity-100 data-[on=true]:opacity-100"
+                          data-on={isSelected}
+                        />
                         <Checkbox
                           checked={isSelected}
                           onCheckedChange={() => toggleOne(task.id)}
@@ -197,28 +232,61 @@ export default function ListPage() {
                       <TableCell>
                         <Link
                           href={`/tasks/${task.id}`}
-                          className="font-medium hover:underline"
+                          className={cn(
+                            "font-medium transition-colors hover:text-primary",
+                            task.status === "DONE" &&
+                              "text-muted-foreground line-through decoration-1"
+                          )}
                         >
                           {task.title}
                         </Link>
+                        {(task.commentCount > 0 || task.attachmentCount > 0) && (
+                          <span className="ml-2 inline-flex items-center gap-2 align-middle text-[11px] text-muted-foreground">
+                            {task.commentCount > 0 && (
+                              <span className="inline-flex items-center gap-0.5">
+                                <MessageSquare className="h-3 w-3" />
+                                {task.commentCount}
+                              </span>
+                            )}
+                            {task.attachmentCount > 0 && (
+                              <span className="inline-flex items-center gap-0.5">
+                                <Paperclip className="h-3 w-3" />
+                                {task.attachmentCount}
+                              </span>
+                            )}
+                          </span>
+                        )}
                       </TableCell>
                       <TableCell>
-                        <Badge variant="outline" className={statusConfig.color}>
-                          {statusConfig.label}
-                        </Badge>
+                        <StatusBadge status={task.status} />
                       </TableCell>
                       <TableCell>
-                        <span className={priorityConfig.color}>
-                          {priorityConfig.label}
-                        </span>
+                        <PriorityBadge priority={task.priority} />
                       </TableCell>
                       <TableCell>
                         <UserChip user={task.assignee} />
                       </TableCell>
-                      <TableCell>
-                        {task.dueDate
-                          ? new Date(task.dueDate).toLocaleDateString()
-                          : "—"}
+                      <TableCell className="pr-4">
+                        {due ? (
+                          <span
+                            className={cn(
+                              "inline-flex items-center gap-1.5 text-sm",
+                              isOverdue
+                                ? "font-medium text-destructive"
+                                : "text-muted-foreground"
+                            )}
+                          >
+                            <Calendar className="h-3.5 w-3.5" />
+                            {due.toLocaleDateString(undefined, {
+                              day: "numeric",
+                              month: "short",
+                            })}
+                          </span>
+                        ) : (
+                          <span className="text-sm text-muted-foreground/50">
+                            —
+                          </span>
+                        )}
                       </TableCell>
                     </TableRow>
                   );

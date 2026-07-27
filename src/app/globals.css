@@ -7,9 +7,23 @@
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  --font-sans: var(--font-sans);
+  /* Was `var(--font-sans)` — self-referential, so Geist never applied. */
+  --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
-  --font-heading: var(--font-sans);
+  --font-heading: var(--font-display);
+
+  /* Semantic colour: every workflow state owns a hue, so the board can be
+     read at a glance without reading any text. */
+  --color-status-backlog: var(--status-backlog);
+  --color-status-todo: var(--status-todo);
+  --color-status-progress: var(--status-progress);
+  --color-status-review: var(--status-review);
+  --color-status-done: var(--status-done);
+  --color-priority-urgent: var(--priority-urgent);
+  --color-priority-high: var(--priority-high);
+  --color-priority-medium: var(--priority-medium);
+  --color-priority-low: var(--priority-low);
+  --color-priority-none: var(--priority-none);
   --color-sidebar-ring: var(--sidebar-ring);
   --color-sidebar-border: var(--sidebar-border);
   --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
@@ -49,72 +63,167 @@
 }
 
 :root {
-  --background: oklch(1 0 0);
-  --foreground: oklch(0.145 0 0);
+  /* A faint indigo cast rather than pure grey — keeps large surfaces from
+     reading as clinical white without tinting the content. */
+  --background: oklch(0.995 0.002 275);
+  --foreground: oklch(0.19 0.02 275);
   --card: oklch(1 0 0);
-  --card-foreground: oklch(0.145 0 0);
+  --card-foreground: oklch(0.19 0.02 275);
   --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.145 0 0);
-  --primary: oklch(0.205 0 0);
-  --primary-foreground: oklch(0.985 0 0);
-  --secondary: oklch(0.97 0 0);
-  --secondary-foreground: oklch(0.205 0 0);
-  --muted: oklch(0.97 0 0);
-  --muted-foreground: oklch(0.556 0 0);
-  --accent: oklch(0.97 0 0);
-  --accent-foreground: oklch(0.205 0 0);
-  --destructive: oklch(0.577 0.245 27.325);
-  --border: oklch(0.922 0 0);
-  --input: oklch(0.922 0 0);
-  --ring: oklch(0.708 0 0);
-  --chart-1: oklch(0.87 0 0);
-  --chart-2: oklch(0.556 0 0);
-  --chart-3: oklch(0.439 0 0);
-  --chart-4: oklch(0.371 0 0);
-  --chart-5: oklch(0.269 0 0);
-  --radius: 0.625rem;
-  --sidebar: oklch(0.985 0 0);
-  --sidebar-foreground: oklch(0.145 0 0);
-  --sidebar-primary: oklch(0.205 0 0);
-  --sidebar-primary-foreground: oklch(0.985 0 0);
-  --sidebar-accent: oklch(0.97 0 0);
+  --popover-foreground: oklch(0.19 0.02 275);
+  --primary: oklch(0.54 0.21 274);
+  --primary-foreground: oklch(0.99 0.005 275);
+  --secondary: oklch(0.965 0.008 275);
+  --secondary-foreground: oklch(0.3 0.04 275);
+  --muted: oklch(0.965 0.008 275);
+  --muted-foreground: oklch(0.52 0.02 275);
+  --accent: oklch(0.955 0.02 275);
+  --accent-foreground: oklch(0.4 0.12 275);
+  --destructive: oklch(0.58 0.23 18);
+  --border: oklch(0.91 0.008 275);
+  --input: oklch(0.91 0.008 275);
+  --ring: oklch(0.54 0.21 274);
+  --chart-1: oklch(0.54 0.21 274);
+  --chart-2: oklch(0.65 0.16 158);
+  --chart-3: oklch(0.72 0.17 65);
+  --chart-4: oklch(0.6 0.22 300);
+  --chart-5: oklch(0.6 0.24 15);
+  --radius: 0.7rem;
+
+  /* Workflow palette. `-soft` is the tinted surface, `-ink` the readable text. */
+  --status-backlog: oklch(0.55 0.03 260);
+  --status-backlog-soft: oklch(0.955 0.01 260);
+  --status-backlog-ink: oklch(0.4 0.03 260);
+  --status-todo: oklch(0.6 0.19 250);
+  --status-todo-soft: oklch(0.96 0.03 250);
+  --status-todo-ink: oklch(0.45 0.18 250);
+  --status-progress: oklch(0.72 0.17 65);
+  --status-progress-soft: oklch(0.96 0.05 75);
+  --status-progress-ink: oklch(0.5 0.13 60);
+  --status-review: oklch(0.6 0.22 300);
+  --status-review-soft: oklch(0.96 0.03 300);
+  --status-review-ink: oklch(0.45 0.2 300);
+  --status-done: oklch(0.65 0.16 158);
+  --status-done-soft: oklch(0.95 0.04 158);
+  --status-done-ink: oklch(0.45 0.13 158);
+
+  --priority-urgent: oklch(0.6 0.24 15);
+  --priority-urgent-soft: oklch(0.96 0.03 15);
+  --priority-high: oklch(0.68 0.19 45);
+  --priority-high-soft: oklch(0.96 0.04 45);
+  --priority-medium: oklch(0.75 0.15 85);
+  --priority-medium-soft: oklch(0.96 0.05 85);
+  --priority-low: oklch(0.65 0.13 230);
+  --priority-low-soft: oklch(0.96 0.02 230);
+  --priority-none: oklch(0.65 0.01 275);
+  --priority-none-soft: oklch(0.96 0.005 275);
+
+  --sidebar: oklch(0.985 0.006 275);
+  --sidebar-foreground: oklch(0.19 0.02 275);
+  --sidebar-primary: oklch(0.54 0.21 274);
+  --sidebar-primary-foreground: oklch(0.99 0.005 275);
+  --sidebar-accent: oklch(0.955 0.02 275);
   --sidebar-accent-foreground: oklch(0.205 0 0);
   --sidebar-border: oklch(0.922 0 0);
   --sidebar-ring: oklch(0.708 0 0);
 }
 
 .dark {
-  --background: oklch(0.145 0 0);
-  --foreground: oklch(0.985 0 0);
-  --card: oklch(0.205 0 0);
-  --card-foreground: oklch(0.985 0 0);
-  --popover: oklch(0.205 0 0);
-  --popover-foreground: oklch(0.985 0 0);
-  --primary: oklch(0.922 0 0);
-  --primary-foreground: oklch(0.205 0 0);
-  --secondary: oklch(0.269 0 0);
-  --secondary-foreground: oklch(0.985 0 0);
-  --muted: oklch(0.269 0 0);
-  --muted-foreground: oklch(0.708 0 0);
-  --accent: oklch(0.269 0 0);
-  --accent-foreground: oklch(0.985 0 0);
-  --destructive: oklch(0.704 0.191 22.216);
-  --border: oklch(1 0 0 / 10%);
-  --input: oklch(1 0 0 / 15%);
-  --ring: oklch(0.556 0 0);
-  --chart-1: oklch(0.87 0 0);
-  --chart-2: oklch(0.556 0 0);
-  --chart-3: oklch(0.439 0 0);
-  --chart-4: oklch(0.371 0 0);
-  --chart-5: oklch(0.269 0 0);
-  --sidebar: oklch(0.205 0 0);
-  --sidebar-foreground: oklch(0.985 0 0);
-  --sidebar-primary: oklch(0.488 0.243 264.376);
-  --sidebar-primary-foreground: oklch(0.985 0 0);
-  --sidebar-accent: oklch(0.269 0 0);
-  --sidebar-accent-foreground: oklch(0.985 0 0);
-  --sidebar-border: oklch(1 0 0 / 10%);
-  --sidebar-ring: oklch(0.556 0 0);
+  --background: oklch(0.16 0.015 275);
+  --foreground: oklch(0.96 0.005 275);
+  --card: oklch(0.21 0.018 275);
+  --card-foreground: oklch(0.96 0.005 275);
+  --popover: oklch(0.21 0.018 275);
+  --popover-foreground: oklch(0.96 0.005 275);
+  --primary: oklch(0.68 0.19 274);
+  --primary-foreground: oklch(0.16 0.02 275);
+  --secondary: oklch(0.27 0.02 275);
+  --secondary-foreground: oklch(0.96 0.005 275);
+  --muted: oklch(0.27 0.02 275);
+  --muted-foreground: oklch(0.7 0.02 275);
+  --accent: oklch(0.32 0.05 275);
+  --accent-foreground: oklch(0.92 0.03 275);
+  --destructive: oklch(0.68 0.2 20);
+  --border: oklch(1 0 0 / 12%);
+  --input: oklch(1 0 0 / 16%);
+  --ring: oklch(0.68 0.19 274);
+  --chart-1: oklch(0.68 0.19 274);
+  --chart-2: oklch(0.72 0.15 158);
+  --chart-3: oklch(0.78 0.15 65);
+  --chart-4: oklch(0.7 0.19 300);
+  --chart-5: oklch(0.68 0.2 15);
+
+  /* Lift the hues and drop the tints so colour still reads on a dark surface. */
+  --status-backlog: oklch(0.68 0.03 260);
+  --status-backlog-soft: oklch(0.3 0.02 260);
+  --status-backlog-ink: oklch(0.82 0.02 260);
+  --status-todo: oklch(0.7 0.17 250);
+  --status-todo-soft: oklch(0.3 0.06 250);
+  --status-todo-ink: oklch(0.84 0.1 250);
+  --status-progress: oklch(0.8 0.15 70);
+  --status-progress-soft: oklch(0.32 0.06 70);
+  --status-progress-ink: oklch(0.88 0.1 75);
+  --status-review: oklch(0.72 0.18 300);
+  --status-review-soft: oklch(0.31 0.07 300);
+  --status-review-ink: oklch(0.86 0.1 300);
+  --status-done: oklch(0.74 0.15 158);
+  --status-done-soft: oklch(0.3 0.06 158);
+  --status-done-ink: oklch(0.86 0.1 158);
+
+  --priority-urgent: oklch(0.7 0.2 15);
+  --priority-urgent-soft: oklch(0.32 0.08 15);
+  --priority-high: oklch(0.76 0.17 45);
+  --priority-high-soft: oklch(0.32 0.07 45);
+  --priority-medium: oklch(0.82 0.14 85);
+  --priority-medium-soft: oklch(0.32 0.06 85);
+  --priority-low: oklch(0.74 0.12 230);
+  --priority-low-soft: oklch(0.3 0.05 230);
+  --priority-none: oklch(0.62 0.01 275);
+  --priority-none-soft: oklch(0.28 0.01 275);
+
+  --sidebar: oklch(0.19 0.018 275);
+  --sidebar-foreground: oklch(0.96 0.005 275);
+  --sidebar-primary: oklch(0.68 0.19 274);
+  --sidebar-primary-foreground: oklch(0.16 0.02 275);
+  --sidebar-accent: oklch(0.3 0.045 275);
+  --sidebar-accent-foreground: oklch(0.94 0.02 275);
+  --sidebar-border: oklch(1 0 0 / 12%);
+  --sidebar-ring: oklch(0.68 0.19 274);
+}
+
+/*
+ * One attribute drives every colour on a card, row, column or badge.
+ * Set data-status / data-priority and the children read --tone,
+ * --tone-soft and --tone-ink. Keeps the palette out of the components.
+ */
+[data-status="BACKLOG"]    { --tone: var(--status-backlog);  --tone-soft: var(--status-backlog-soft);  --tone-ink: var(--status-backlog-ink); }
+[data-status="TODO"]       { --tone: var(--status-todo);     --tone-soft: var(--status-todo-soft);     --tone-ink: var(--status-todo-ink); }
+[data-status="IN_PROGRESS"]{ --tone: var(--status-progress); --tone-soft: var(--status-progress-soft); --tone-ink: var(--status-progress-ink); }
+[data-status="IN_REVIEW"]  { --tone: var(--status-review);   --tone-soft: var(--status-review-soft);   --tone-ink: var(--status-review-ink); }
+[data-status="DONE"]       { --tone: var(--status-done);     --tone-soft: var(--status-done-soft);     --tone-ink: var(--status-done-ink); }
+
+[data-priority="URGENT"] { --tone: var(--priority-urgent); --tone-soft: var(--priority-urgent-soft); }
+[data-priority="HIGH"]   { --tone: var(--priority-high);   --tone-soft: var(--priority-high-soft); }
+[data-priority="MEDIUM"] { --tone: var(--priority-medium); --tone-soft: var(--priority-medium-soft); }
+[data-priority="LOW"]    { --tone: var(--priority-low);    --tone-soft: var(--priority-low-soft); }
+[data-priority="NONE"]   { --tone: var(--priority-none);   --tone-soft: var(--priority-none-soft); }
+
+@utility tone-chip {
+  background-color: var(--tone-soft);
+  color: var(--tone-ink, var(--tone));
+}
+
+/* The signature: a colour spine identifying a task's state at a glance. */
+@utility tone-rail {
+  position: relative;
+  overflow: hidden;
+}
+@utility tone-rail-bar {
+  position: absolute;
+  inset-block: 0;
+  inset-inline-start: 0;
+  width: 3px;
+  background-color: var(--tone);
 }
 
 @layer base {
@@ -126,5 +235,55 @@
   }
   html {
     @apply font-sans;
+  }
+  /* The display face carries the personality; body text stays neutral. */
+  h1, h2, .font-display {
+    font-family: var(--font-display), var(--font-sans), sans-serif;
+    letter-spacing: -0.02em;
+  }
+}
+
+@layer components {
+  /* Cards lift toward the pointer. Cheap, and it makes the board feel live. */
+  .lift {
+    transition:
+      transform 160ms cubic-bezier(0.22, 1, 0.36, 1),
+      box-shadow 160ms cubic-bezier(0.22, 1, 0.36, 1),
+      border-color 160ms ease;
+  }
+  .lift:hover {
+    transform: translateY(-2px);
+    box-shadow:
+      0 1px 2px oklch(0.2 0.03 275 / 0.06),
+      0 8px 20px -6px oklch(0.2 0.03 275 / 0.14);
+  }
+
+  .enter {
+    animation: enter-up 320ms cubic-bezier(0.22, 1, 0.36, 1) both;
+  }
+}
+
+@keyframes enter-up {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+/* Movement is decoration here, never information — safe to switch off. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+  .lift:hover {
+    transform: none;
   }
 }

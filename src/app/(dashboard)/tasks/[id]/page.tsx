@@ -3,7 +3,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
@@ -20,9 +19,11 @@ import { TiptapEditor } from "@/components/editor/tiptap-editor";
 import { CommentList } from "@/components/tasks/comment-list";
 import { AssigneePicker } from "@/components/tasks/assignee-picker";
 import { UserChip } from "@/components/tasks/user-chip";
+import { StatusBadge, PriorityBadge } from "@/components/tasks/status-badge";
+import { cn } from "@/lib/utils";
 import { notify } from "@/lib/notify";
 import type { Attachment, Comment, Task } from "@/lib/types";
-import { STATUS_CONFIG, PRIORITY_CONFIG, STATUS_ITEMS, PRIORITY_ITEMS } from "@/lib/types";
+import { STATUS_ITEMS, PRIORITY_ITEMS } from "@/lib/types";
 
 /** Waited out before persisting the description, so typing isn't one request per keystroke. */
 const DESCRIPTION_SAVE_DELAY = 800;
@@ -219,51 +220,71 @@ export default function TaskDetailPage() {
 
   if (!task) return null;
 
-  const statusConfig = STATUS_CONFIG[task.status];
-  const priorityConfig = PRIORITY_CONFIG[task.priority];
-
   return (
-    <div className="h-full flex flex-col">
-      <div className="flex items-start justify-between gap-4 p-6 border-b">
-        <div className="flex min-w-0 flex-1 items-start gap-3">
+    <div className="enter flex h-full flex-col">
+      <header
+        data-status={task.status}
+        className="relative border-b bg-card/60 px-6 py-5 backdrop-blur"
+      >
+        {/* The task's status colour, carried through from board and list. */}
+        <span
+          aria-hidden
+          className="absolute inset-x-0 top-0 h-1 bg-[var(--tone)]"
+        />
+        <div className="flex items-start justify-between gap-4">
+          <div className="flex min-w-0 flex-1 items-start gap-2">
+            <Button
+              variant="ghost"
+              size="icon"
+              className="mt-0.5 shrink-0"
+              onClick={() => router.push("/board")}
+              aria-label="Back to board"
+            >
+              <ArrowLeft className="h-5 w-5" />
+            </Button>
+            <div className="min-w-0 flex-1">
+              {/* Editable in place — previously the title was fixed at creation. */}
+              <Input
+                value={titleDraft}
+                onChange={(e) => setTitleDraft(e.target.value)}
+                onBlur={handleTitleCommit}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") e.currentTarget.blur();
+                  if (e.key === "Escape") {
+                    setTitleDraft(task.title);
+                    e.currentTarget.blur();
+                  }
+                }}
+                aria-label="Task title"
+                className={cn(
+                  "font-display h-auto rounded-lg border-transparent bg-transparent px-2 py-1",
+                  "text-2xl font-bold tracking-tight shadow-none",
+                  "hover:bg-muted/60 focus-visible:border-input focus-visible:bg-background"
+                )}
+              />
+              <div className="mt-1.5 flex flex-wrap items-center gap-2 px-2">
+                <StatusBadge status={task.status} />
+                <PriorityBadge priority={task.priority} />
+                {task.assignee && (
+                  <>
+                    <span className="text-muted-foreground/40">·</span>
+                    <UserChip user={task.assignee} />
+                  </>
+                )}
+              </div>
+            </div>
+          </div>
           <Button
             variant="ghost"
             size="icon"
-            className="mt-1 shrink-0"
-            onClick={() => router.push("/board")}
+            onClick={handleDelete}
+            aria-label="Delete task"
+            className="text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
           >
-            <ArrowLeft className="h-5 w-5" />
+            <Trash2 className="h-4 w-4" />
           </Button>
-          <div className="min-w-0 flex-1">
-            {/* Editable in place — previously the title was fixed at creation. */}
-            <Input
-              value={titleDraft}
-              onChange={(e) => setTitleDraft(e.target.value)}
-              onBlur={handleTitleCommit}
-              onKeyDown={(e) => {
-                if (e.key === "Enter") e.currentTarget.blur();
-                if (e.key === "Escape") {
-                  setTitleDraft(task.title);
-                  e.currentTarget.blur();
-                }
-              }}
-              aria-label="Task title"
-              className="h-auto border-transparent bg-transparent px-2 py-1 text-2xl font-bold shadow-none hover:border-input focus-visible:border-input"
-            />
-            <div className="mt-1 flex items-center gap-2 px-2">
-              <Badge variant="outline" className={statusConfig.color}>
-                {statusConfig.label}
-              </Badge>
-              <Badge variant="outline" className={priorityConfig.color}>
-                {priorityConfig.label}
-              </Badge>
-            </div>
-          </div>
         </div>
-        <Button variant="destructive" size="icon" onClick={handleDelete}>
-          <Trash2 className="h-4 w-4" />
-        </Button>
-      </div>
+      </header>
 
       <div className="flex-1 overflow-auto p-6">
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -467,9 +488,12 @@ export default function TaskDetailPage() {
                 <CardContent>
                   <div className="flex flex-wrap gap-2">
                     {task.tags.map((taskTag) => (
-                      <Badge key={taskTag.id} variant="secondary">
+                      <span
+                        key={taskTag.id}
+                        className="rounded-full bg-secondary px-2.5 py-0.5 text-xs font-medium text-secondary-foreground"
+                      >
                         {taskTag.tag.name}
-                      </Badge>
+                      </span>
                     ))}
                   </div>
                 </CardContent>

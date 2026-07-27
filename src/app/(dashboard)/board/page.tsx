@@ -7,16 +7,16 @@ import {
   Draggable,
   DropResult,
 } from "@hello-pangea/dnd";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Plus } from "lucide-react";
+import { Plus, Inbox } from "lucide-react";
+import { StatusDot } from "@/components/tasks/status-badge";
+import { cn } from "@/lib/utils";
 import { CreateTaskDialog } from "@/components/tasks/create-task-dialog";
 import { TaskCard } from "@/components/tasks/task-card";
 import { notify } from "@/lib/notify";
 import type { Task, TaskStatus } from "@/lib/types";
-import { STATUS_CONFIG } from "@/lib/types";
+import { STATUS_ITEMS } from "@/lib/types";
 
 const columns: TaskStatus[] = [
   "BACKLOG",
@@ -145,92 +145,96 @@ export default function BoardPage() {
 
   return (
     <div className="h-full flex flex-col">
-      <div className="flex items-center justify-between p-6 border-b">
+      <header className="flex items-center justify-between border-b bg-card/60 px-6 py-4 backdrop-blur">
         <div>
-          <h1 className="text-2xl font-bold">Board</h1>
-          <p className="text-muted-foreground">
-            Drag tasks between columns to update status
+          <h1 className="text-2xl font-bold tracking-tight">Board</h1>
+          <p className="text-sm text-muted-foreground">
+            {tasks.length} {tasks.length === 1 ? "task" : "tasks"} · drag a card
+            to change its status
           </p>
         </div>
-        <Button onClick={() => setIsCreateDialogOpen(true)}>
-          <Plus className="h-4 w-4 mr-2" />
-          New Task
+        <Button onClick={() => setIsCreateDialogOpen(true)} className="gap-2">
+          <Plus className="h-4 w-4" />
+          New task
         </Button>
-      </div>
+      </header>
 
       <div className="flex-1 overflow-x-auto p-6">
         <DragDropContext onDragEnd={handleDragEnd}>
-          <div className="flex gap-4 h-full min-w-max">
+          <div className="flex h-full min-w-max items-stretch gap-4">
             {columns.map((column) => {
               const columnTasks = tasksByColumn[column];
-              const config = STATUS_CONFIG[column];
 
               return (
-                <div key={column} className="w-80 flex-shrink-0">
-                  <Card className="h-full bg-muted/50">
-                    <CardHeader className="pb-3">
-                      <div className="flex items-center gap-2">
-                        <div
-                          className={`h-3 w-3 rounded-full ${config.color}`}
-                        />
-                        <CardTitle className="text-sm font-medium">
-                          {config.label}
-                        </CardTitle>
-                        <Badge variant="secondary" className="ml-1">
-                          {columnTasks.length}
-                        </Badge>
-                      </div>
-                    </CardHeader>
-                    <CardContent>
-                      <Droppable droppableId={column}>
-                        {(provided, snapshot) => (
-                          <div
-                            ref={provided.innerRef}
-                            {...provided.droppableProps}
-                            className={`space-y-2 min-h-[200px] rounded-lg p-2 transition-colors ${
-                              snapshot.isDraggingOver ? "bg-accent" : ""
-                            }`}
-                          >
-                            {isLoading ? (
-                              <div className="space-y-2">
-                                <Skeleton className="h-24 w-full" />
-                                <Skeleton className="h-24 w-full" />
-                              </div>
-                            ) : (
-                              columnTasks.map((task, index) => (
-                                <Draggable
-                                  key={task.id}
-                                  draggableId={task.id}
-                                  index={index}
+                <section
+                  key={column}
+                  data-status={column}
+                  className="flex max-h-full w-[19rem] shrink-0 flex-col rounded-xl border bg-muted/40"
+                >
+                  {/* Header wears the column's colour, so the board reads as a
+                      sequence of states rather than five identical boxes. */}
+                  <div className="flex items-center gap-2 border-b border-[var(--tone)]/25 px-3 py-2.5">
+                    <StatusDot status={column} />
+                    <h2 className="text-[11px] font-bold uppercase tracking-wider text-[var(--tone-ink)]">
+                      {STATUS_ITEMS[column]}
+                    </h2>
+                    <span className="tone-chip ml-auto rounded-full px-2 py-0.5 text-[11px] font-bold tabular-nums">
+                      {columnTasks.length}
+                    </span>
+                  </div>
+
+                  <Droppable droppableId={column}>
+                    {(provided, snapshot) => (
+                      <div
+                        ref={provided.innerRef}
+                        {...provided.droppableProps}
+                        className={cn(
+                          "flex-1 space-y-2 overflow-y-auto rounded-b-xl p-2 transition-colors duration-150",
+                          snapshot.isDraggingOver &&
+                            "bg-[var(--tone-soft)] ring-1 ring-inset ring-[var(--tone)]/30"
+                        )}
+                      >
+                        {isLoading ? (
+                          <div className="space-y-2">
+                            <Skeleton className="h-24 w-full rounded-xl" />
+                            <Skeleton className="h-24 w-full rounded-xl" />
+                          </div>
+                        ) : (
+                          columnTasks.map((task, index) => (
+                            <Draggable
+                              key={task.id}
+                              draggableId={task.id}
+                              index={index}
+                            >
+                              {(dragProvided, dragSnapshot) => (
+                                <div
+                                  ref={dragProvided.innerRef}
+                                  {...dragProvided.draggableProps}
+                                  {...dragProvided.dragHandleProps}
                                 >
-                                  {(dragProvided, dragSnapshot) => (
-                                    <div
-                                      ref={dragProvided.innerRef}
-                                      {...dragProvided.draggableProps}
-                                      {...dragProvided.dragHandleProps}
-                                    >
-                                      <TaskCard
-                                        task={task}
-                                        isDragging={dragSnapshot.isDragging}
-                                        onDelete={handleTaskDeleted}
-                                      />
-                                    </div>
-                                  )}
-                                </Draggable>
-                              ))
-                            )}
-                            {provided.placeholder}
-                            {!isLoading && columnTasks.length === 0 && (
-                              <p className="px-2 py-6 text-center text-sm text-muted-foreground">
-                                No tasks
-                              </p>
-                            )}
+                                  <TaskCard
+                                    task={task}
+                                    isDragging={dragSnapshot.isDragging}
+                                    onDelete={handleTaskDeleted}
+                                  />
+                                </div>
+                              )}
+                            </Draggable>
+                          ))
+                        )}
+                        {provided.placeholder}
+                        {!isLoading && columnTasks.length === 0 && (
+                          <div className="flex flex-col items-center gap-1.5 px-2 py-8 text-center">
+                            <Inbox className="h-5 w-5 text-muted-foreground/50" />
+                            <p className="text-xs text-muted-foreground">
+                              Nothing here yet
+                            </p>
                           </div>
                         )}
-                      </Droppable>
-                    </CardContent>
-                  </Card>
-                </div>
+                      </div>
+                    )}
+                  </Droppable>
+                </section>
               );
             })}
           </div>

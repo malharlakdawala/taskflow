@@ -12,9 +12,9 @@ import {
   LogOut,
   Moon,
   Sun,
+  Zap,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
 import { signOut } from "@/app/(auth)/actions";
 import { useTheme } from "next-themes";
 import type { SessionUser } from "@/lib/types";
@@ -36,12 +36,20 @@ export function Sidebar({ user }: { user: SessionUser }) {
     : navigation;
 
   return (
-    <div className="flex h-full w-64 flex-col border-r bg-card">
-      <div className="flex h-16 items-center px-6 border-b">
-        <h1 className="text-xl font-bold">TaskFlow</h1>
+    <div className="flex h-full w-64 shrink-0 flex-col border-r bg-sidebar">
+      <div className="flex h-16 items-center gap-2.5 border-b px-5">
+        <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary text-primary-foreground shadow-sm">
+          <Zap className="h-4.5 w-4.5" fill="currentColor" strokeWidth={0} />
+        </span>
+        <span className="font-display text-lg font-bold tracking-tight">
+          TaskFlow
+        </span>
       </div>
 
-      <nav className="flex-1 space-y-1 p-4">
+      <nav className="flex-1 space-y-0.5 p-3">
+        <p className="px-3 pb-2 pt-1 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+          Workspace
+        </p>
         {links.map((item) => {
           const isActive =
             pathname === item.href ||
@@ -50,48 +58,61 @@ export function Sidebar({ user }: { user: SessionUser }) {
             <Link
               key={item.name}
               href={item.href}
+              aria-current={isActive ? "page" : undefined}
               className={cn(
-                "flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors",
+                "group relative flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium",
+                "transition-colors duration-150",
                 isActive
-                  ? "bg-primary text-primary-foreground"
-                  : "text-muted-foreground hover:bg-muted hover:text-foreground"
+                  ? "bg-sidebar-accent text-sidebar-accent-foreground"
+                  : "text-muted-foreground hover:bg-sidebar-accent/50 hover:text-foreground"
               )}
             >
-              <item.icon className="h-5 w-5" />
+              {/* Active marker doubles as the accent, so the label stays legible. */}
+              <span
+                className={cn(
+                  "absolute inset-y-1.5 left-0 w-1 rounded-r-full bg-primary transition-opacity",
+                  isActive ? "opacity-100" : "opacity-0"
+                )}
+              />
+              <item.icon
+                className={cn(
+                  "h-[18px] w-[18px] transition-colors",
+                  isActive ? "text-primary" : "text-muted-foreground group-hover:text-foreground"
+                )}
+              />
               {item.name}
             </Link>
           );
         })}
       </nav>
 
-      <div className="border-t p-4 space-y-2">
-        <div className="flex items-center gap-3 rounded-lg px-1 py-2">
-          <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-primary/10 text-xs font-semibold text-primary">
+      <div className="space-y-1 border-t p-3">
+        <div className="flex items-center gap-2.5 rounded-lg px-2 py-2">
+          <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-primary/12 text-[11px] font-bold text-primary ring-1 ring-primary/20">
             {initialsFor(user)}
           </span>
           <div className="min-w-0 flex-1">
-            <p className="truncate text-sm font-medium">{displayName(user)}</p>
-            <p className="truncate text-xs text-muted-foreground">{user.email}</p>
+            <p className="truncate text-sm font-medium leading-tight">
+              {displayName(user)}
+            </p>
+            <p className="truncate text-xs text-muted-foreground">
+              {isAdmin ? "Admin" : "Member"}
+            </p>
           </div>
-          {isAdmin && (
-            <Badge variant="secondary" className="shrink-0 text-[10px]">
-              Admin
-            </Badge>
-          )}
         </div>
 
         <Button
           variant="ghost"
           size="sm"
-          className="w-full justify-start gap-3"
+          className="w-full justify-start gap-3 text-muted-foreground hover:text-foreground"
           onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
         >
           {theme === "dark" ? (
-            <Sun className="h-5 w-5" />
+            <Sun className="h-[18px] w-[18px]" />
           ) : (
-            <Moon className="h-5 w-5" />
+            <Moon className="h-[18px] w-[18px]" />
           )}
-          {theme === "dark" ? "Light Mode" : "Dark Mode"}
+          {theme === "dark" ? "Light mode" : "Dark mode"}
         </Button>
 
         <form action={signOut}>
@@ -99,10 +120,10 @@ export function Sidebar({ user }: { user: SessionUser }) {
             type="submit"
             variant="ghost"
             size="sm"
-            className="w-full justify-start gap-3"
+            className="w-full justify-start gap-3 text-muted-foreground hover:text-foreground"
           >
-            <LogOut className="h-5 w-5" />
-            Sign Out
+            <LogOut className="h-[18px] w-[18px]" />
+            Sign out
           </Button>
         </form>
       </div>

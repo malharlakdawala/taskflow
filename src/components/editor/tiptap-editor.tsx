@@ -126,7 +126,7 @@ export function TiptapEditor({
     editorProps: {
       attributes: {
         class: cn(
-          "prose prose-sm sm:prose-base lg:prose-lg xl:prose-2xl mx-auto focus:outline-none min-h-[200px] p-4",
+          "prose prose-sm dark:prose-invert max-w-none focus:outline-none min-h-[160px] p-4",
           className
         ),
       },
