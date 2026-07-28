@@ -3,7 +3,10 @@ import { notifyDueSoon } from "@/lib/email/notify";
 
 /**
  * Daily digest of overdue and soon-due tasks, one email per assignee.
- * Scheduled from vercel.json.
+ *
+ * Scheduled from vercel.json at 02:30 UTC, which is 08:00 IST — the workspace
+ * owner's timezone. Vercel only schedules crons in UTC, so that offset is baked
+ * into the expression and has to be recalculated if the team moves.
  *
  * Unlike every other route here there is no signed-in user to authorise, so the
  * request itself has to prove it came from the scheduler. Vercel sends the
