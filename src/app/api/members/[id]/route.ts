@@ -1,7 +1,8 @@
-import { NextResponse } from "next/server";
+import { NextResponse, after } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireAdmin } from "@/lib/auth";
 import { updateMemberSchema, formatZodError } from "@/lib/validation";
+import { notifyAccountApproved } from "@/lib/email/notify";
 
 /**
  * Approve, reject, revoke, or change the role of a member. Admin only.
@@ -69,6 +70,14 @@ export async function PATCH(
       role: true, status: true, approvedAt: true, createdAt: true,
     },
   });
+
+  // Only on the PENDING → ACTIVE transition. Re-saving an already-active
+  // member's role should not tell them again that they've been approved.
+  if (status === "ACTIVE" && target.status !== "ACTIVE") {
+    after(() =>
+      notifyAccountApproved({ memberId: id, approverId: guard.user.id })
+    );
+  }
 
   return NextResponse.json(member);
 }

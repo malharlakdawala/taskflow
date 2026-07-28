@@ -1,10 +1,11 @@
-import { NextResponse } from "next/server";
+import { NextResponse, after } from "next/server";
 import { Prisma } from "@/generated/prisma/client";
 import { prisma } from "@/lib/prisma";
 import { requireMember } from "@/lib/auth";
 import { sanitizeOrNull } from "@/lib/sanitize";
 import { updateTaskSchema, formatZodError } from "@/lib/validation";
 import { TASK_DETAIL_INCLUDE, serializeTask } from "@/lib/tasks";
+import { notifyTaskAssigned } from "@/lib/email/notify";
 
 const notFound = () =>
   NextResponse.json({ error: "Task not found" }, { status: 404 });
@@ -59,6 +60,17 @@ export async function PATCH(
   if (assigneeId !== undefined) data.assigneeId = assigneeId;
   if (order !== undefined) data.order = order;
 
+  // Only read the current assignee when the request could change it — an extra
+  // round-trip on every status tweak is not worth paying for.
+  let previousAssigneeId: string | null = null;
+  if (assigneeId !== undefined) {
+    const current = await prisma.task.findUnique({
+      where: { id },
+      select: { assigneeId: true },
+    });
+    previousAssigneeId = current?.assigneeId ?? null;
+  }
+
   // update() throws P2025 when the row is gone, which saves a pre-read.
   try {
     const task = await prisma.task.update({
@@ -67,6 +79,20 @@ export async function PATCH(
       relationLoadStrategy: "join",
       include: TASK_DETAIL_INCLUDE,
     });
+
+    if (assigneeId !== undefined) {
+      // after() runs once the response is on the wire, so the picker doesn't
+      // wait on an SMTP round-trip to show the new assignee.
+      after(() =>
+        notifyTaskAssigned({
+          taskId: task.id,
+          assigneeId: task.assigneeId,
+          previousAssigneeId,
+          actorId: guard.user.id,
+        })
+      );
+    }
+
     return NextResponse.json(serializeTask(task));
   } catch (error) {
     if (

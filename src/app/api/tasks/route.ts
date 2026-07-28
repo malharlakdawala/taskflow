@@ -1,8 +1,9 @@
-import { NextResponse } from "next/server";
+import { NextResponse, after } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireMember } from "@/lib/auth";
 import { sanitizeOrNull } from "@/lib/sanitize";
 import { createTaskSchema, formatZodError } from "@/lib/validation";
+import { notifyTaskAssigned } from "@/lib/email/notify";
 import {
   TASK_LIST_SELECT,
   TASK_DETAIL_INCLUDE,
@@ -58,6 +59,17 @@ export async function POST(request: Request) {
     relationLoadStrategy: "join",
     include: TASK_DETAIL_INCLUDE,
   });
+
+  // A task created straight onto someone else's plate is an assignment; one
+  // that defaults to the creator is not, and notifyTaskAssigned skips it.
+  after(() =>
+    notifyTaskAssigned({
+      taskId: task.id,
+      assigneeId: task.assigneeId,
+      previousAssigneeId: null,
+      actorId: guard.user.id,
+    })
+  );
 
   return NextResponse.json(serializeTask(task), { status: 201 });
 }

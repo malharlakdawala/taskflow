@@ -1,9 +1,10 @@
-import { NextResponse } from "next/server";
+import { NextResponse, after } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireMember } from "@/lib/auth";
 import { sanitizeOrNull } from "@/lib/sanitize";
 import { createCommentSchema, formatZodError } from "@/lib/validation";
 import { serializeComment } from "@/lib/tasks";
+import { notifyCommentAdded } from "@/lib/email/notify";
 
 export async function GET(
   request: Request,
@@ -60,6 +61,14 @@ export async function POST(
     },
     include: { author: { select: { id: true, email: true, name: true, avatarUrl: true } } },
   });
+
+  after(() =>
+    notifyCommentAdded({
+      taskId: id,
+      commentHtml: content,
+      actorId: guard.user.id,
+    })
+  );
 
   return NextResponse.json(serializeComment(comment), { status: 201 });
 }

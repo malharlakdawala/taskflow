@@ -1,8 +1,9 @@
-import { NextResponse } from "next/server";
+import { NextResponse, after } from "next/server";
 import { Prisma } from "@/generated/prisma/client";
 import { prisma } from "@/lib/prisma";
 import { requireMember } from "@/lib/auth";
 import { bulkUpdateSchema, bulkDeleteSchema, formatZodError } from "@/lib/validation";
+import { notifyTasksAssigned } from "@/lib/email/notify";
 
 /**
  * Applies one change to many tasks in a single request. The list view's bulk
@@ -26,10 +27,38 @@ export async function PATCH(request: Request) {
   if (assigneeId !== undefined) data.assigneeId = assigneeId;
   if (dueDate !== undefined) data.dueDate = dueDate ? new Date(dueDate) : null;
 
+  // Which rows are genuinely changing hands has to be read before the write.
+  // Comparing in JS rather than with a `not` filter because SQL's NULL <> x is
+  // NULL, so an unassigned task would be missed by the query.
+  // Held in its own const so the narrowing survives into the after() closure.
+  const nextAssigneeId = assigneeId ?? null;
+  let newlyAssigned: string[] = [];
+  if (nextAssigneeId !== null) {
+    const before = await prisma.task.findMany({
+      where: { id: { in: ids } },
+      select: { id: true, assigneeId: true },
+    });
+    newlyAssigned = before
+      .filter((task) => task.assigneeId !== nextAssigneeId)
+      .map((task) => task.id);
+  }
+
   const result = await prisma.task.updateMany({
     where: { id: { in: ids } },
     data,
   });
+
+  if (newlyAssigned.length > 0) {
+    // One digest, not one email per task — a fifty-task reassignment should
+    // not fill someone's inbox.
+    after(() =>
+      notifyTasksAssigned({
+        taskIds: newlyAssigned,
+        assigneeId: nextAssigneeId,
+        actorId: guard.user.id,
+      })
+    );
+  }
 
   return NextResponse.json({ success: true, updated: result.count });
 }
