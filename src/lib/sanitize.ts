@@ -21,10 +21,14 @@ const OPTIONS: sanitizeHtml.IOptions = {
     "a", "img",
     "table", "thead", "tbody", "tr", "th", "td",
     "div", "span",
+    // Tiptap's task lists are a <ul> of <li><label><input type=checkbox>.
+    // Stripping these left checklists rendering as unmarked, unindented text.
+    "label", "input",
   ],
   allowedAttributes: {
     a: ["href", "target", "rel"],
     img: ["src", "alt", "title", "width", "height"],
+    input: ["type", "checked", "disabled"],
     "*": ["class", "colspan", "rowspan", "data-type", "data-checked"],
   },
   // No data: or javascript:. Blocks both script execution and megabyte-sized
@@ -34,6 +38,14 @@ const OPTIONS: sanitizeHtml.IOptions = {
   transformTags: {
     // Anything opening a new tab should not be able to reach window.opener.
     a: sanitizeHtml.simpleTransform("a", { rel: "noopener noreferrer" }, true),
+    // `input` is allowed only as a checklist marker. Pinning type and disabled
+    // means no stored content can present a real, fillable field.
+    // merge:true so an existing `checked` survives while type is pinned.
+    input: sanitizeHtml.simpleTransform(
+      "input",
+      { type: "checkbox", disabled: "disabled" },
+      true
+    ),
   },
 };
 

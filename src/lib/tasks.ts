@@ -1,5 +1,6 @@
 import type { Prisma } from "@/generated/prisma/client";
 import { sanitizeRichText } from "@/lib/sanitize";
+import { toRichHtml } from "@/lib/rich-text";
 
 /** Only the user fields the UI renders — never leak approval state into task payloads. */
 const USER_SUMMARY = {
@@ -50,10 +51,16 @@ type TaskDetailRow = Prisma.TaskGetPayload<{ include: typeof TASK_DETAIL_INCLUDE
 /**
  * `description` and `comment.content` are jsonb columns holding Tiptap HTML.
  * Prisma types them as JsonValue, so normalise to the string|null the UI wants.
+ *
+ * The MCP server writes these columns directly, and a terminal or import script
+ * supplies Markdown rather than HTML. `toRichHtml` gives that content its
+ * structure back; rows that already hold HTML pass through untouched, so
+ * round-tripping through the editor loses nothing.
  */
 function asRichText(value: Prisma.JsonValue | null | undefined): string | null {
   if (value === null || value === undefined) return null;
-  return typeof value === "string" ? value : JSON.stringify(value);
+  const raw = typeof value === "string" ? value : JSON.stringify(value);
+  return toRichHtml(raw);
 }
 
 /**

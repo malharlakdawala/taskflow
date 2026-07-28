@@ -44,6 +44,12 @@ const pool = new pg.Pool({
   connectionTimeoutMillis: 10_000,
 });
 
+/**
+ * `description` and comment `content` may be supplied as Markdown. The web app
+ * converts non-HTML rich text on read (src/lib/rich-text.ts), so headings,
+ * lists and fenced code survive without this server needing to know about
+ * Tiptap's markup. Passing HTML directly works too.
+ */
 const STATUSES = ["BACKLOG", "TODO", "IN_PROGRESS", "IN_REVIEW", "DONE"] as const;
 const PRIORITIES = ["URGENT", "HIGH", "MEDIUM", "LOW", "NONE"] as const;
 
