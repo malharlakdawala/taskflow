@@ -40,7 +40,16 @@ import {
   Loader2,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { Separator } from "@/components/ui/separator";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
 import { notify } from "@/lib/notify";
 
@@ -70,6 +79,10 @@ interface TiptapEditorProps {
   placeholder?: string;
   editable?: boolean;
   className?: string;
+  /** Puts the caret at the end on mount — for editors opened by an explicit action. */
+  autoFocus?: boolean;
+  /** Rendered inside the editor's frame, below the content area. */
+  footer?: React.ReactNode;
 }
 
 export function TiptapEditor({
@@ -78,10 +91,13 @@ export function TiptapEditor({
   placeholder = "Start writing...",
   editable = true,
   className,
+  autoFocus = false,
+  footer,
 }: TiptapEditorProps) {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const editorRef = useRef<Editor | null>(null);
   const [isUploading, setIsUploading] = useState(false);
+  const [linkDraft, setLinkDraft] = useState<string | null>(null);
 
   const editor = useEditor({
     extensions: [
@@ -169,6 +185,7 @@ export function TiptapEditor({
       onChange(editor.getHTML());
     },
     editable,
+    autofocus: autoFocus ? "end" : false,
     immediatelyRender: false,
   });
 
@@ -216,11 +233,21 @@ export function TiptapEditor({
     return null;
   }
 
-  const addLink = () => {
-    const url = window.prompt("Enter URL:");
-    if (url) {
-      editor.chain().focus().setLink({ href: url }).run();
+  /** Opens the link dialog seeded with the current href, if the caret is in one. */
+  const openLinkDialog = () =>
+    setLinkDraft(editor.getAttributes("link").href ?? "");
+
+  const applyLink = () => {
+    const url = (linkDraft ?? "").trim();
+    setLinkDraft(null);
+    if (!url) {
+      editor.chain().focus().unsetLink().run();
+      return;
     }
+    // A bare domain is what people type; without a scheme the browser treats
+    // the href as a relative path and the link goes nowhere.
+    const href = /^[a-z][\w+.-]*:/i.test(url) ? url : `https://${url}`;
+    editor.chain().focus().extendMarkRange("link").setLink({ href }).run();
   };
 
   /** Opens the OS file picker; no URL typing involved. */
@@ -390,7 +417,8 @@ export function TiptapEditor({
             variant="ghost"
             size="icon"
             className="h-7 w-7"
-            onClick={addLink}
+            onClick={openLinkDialog}
+            title={editor.isActive("link") ? "Edit link" : "Add link"}
             data-active={editor.isActive("link")}
           >
             <LinkIcon className="h-3.5 w-3.5" />
@@ -477,6 +505,46 @@ export function TiptapEditor({
           Uploading image…
         </p>
       )}
+      {footer}
+
+      <Dialog
+        open={linkDraft !== null}
+        onOpenChange={(open) => {
+          if (!open) setLinkDraft(null);
+        }}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>
+              {editor.isActive("link") ? "Edit link" : "Add link"}
+            </DialogTitle>
+            <DialogDescription>
+              Leave the field empty to remove the link.
+            </DialogDescription>
+          </DialogHeader>
+          <Input
+            autoFocus
+            value={linkDraft ?? ""}
+            placeholder="example.com/page"
+            aria-label="Link URL"
+            onChange={(e) => setLinkDraft(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") {
+                e.preventDefault();
+                applyLink();
+              }
+            }}
+          />
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setLinkDraft(null)}>
+              Cancel
+            </Button>
+            <Button onClick={applyLink}>
+              {(linkDraft ?? "").trim() ? "Apply" : "Remove link"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

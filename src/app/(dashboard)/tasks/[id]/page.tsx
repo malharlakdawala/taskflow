@@ -1,23 +1,25 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
 import { Skeleton } from "@/components/ui/skeleton";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import {
   ArrowLeft,
   Trash2,
   Paperclip,
   Upload,
   X,
-  Check,
   Loader2,
   AlignLeft,
   MessageSquare,
   FileText,
+  CalendarClock,
 } from "lucide-react";
 import {
   Select,
@@ -26,18 +28,26 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { TiptapEditor } from "@/components/editor/tiptap-editor";
+import { RichTextField } from "@/components/editor/rich-text-field";
 import { CommentList } from "@/components/tasks/comment-list";
 import { AssigneePicker } from "@/components/tasks/assignee-picker";
 import { UserChip } from "@/components/tasks/user-chip";
-import { StatusBadge, PriorityBadge } from "@/components/tasks/status-badge";
+import { StatusBadge, PriorityBadge, StatusDot } from "@/components/tasks/status-badge";
 import { cn } from "@/lib/utils";
 import { notify } from "@/lib/notify";
 import type { Attachment, Comment, Task } from "@/lib/types";
 import { STATUS_ITEMS, PRIORITY_ITEMS } from "@/lib/types";
 
-/** Waited out before persisting the description, so typing isn't one request per keystroke. */
-const DESCRIPTION_SAVE_DELAY = 800;
+/**
+ * The path this browser tab first loaded, captured once per document.
+ *
+ * If it still matches the task we're on, the user arrived by pasting the link
+ * and there is no in-app history behind us — router.back() would take them out
+ * of the app entirely. Comparing against it tells the two cases apart without
+ * relying on document.referrer, which client-side navigation never updates.
+ */
+const ENTRY_PATH =
+  typeof window === "undefined" ? null : window.location.pathname;
 
 /** yyyy-mm-dd for <input type="date">, in local time. */
 function toDateInput(value: string | null): string {
@@ -47,16 +57,21 @@ function toDateInput(value: string | null): string {
   return new Date(d.getTime() - offset).toISOString().slice(0, 10);
 }
 
+const FIELD_LABEL =
+  "text-[11px] font-semibold uppercase tracking-wider text-muted-foreground";
+
 export default function TaskDetailPage() {
   const params = useParams();
   const router = useRouter();
   const [task, setTask] = useState<Task | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [notFound, setNotFound] = useState(false);
   const [titleDraft, setTitleDraft] = useState("");
-  const [isSavingDescription, setIsSavingDescription] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
+  const [isConfirmingDelete, setIsConfirmingDelete] = useState(false);
+  const [pendingRemoval, setPendingRemoval] = useState<Attachment | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const descriptionTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [isDropTarget, setIsDropTarget] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -72,7 +87,9 @@ export default function TaskDetailPage() {
         }
       } catch (error) {
         console.error("Failed to fetch task:", error);
-        if (!cancelled) router.push("/board");
+        // Redirecting swallowed the reason. An explicit state lets the user
+        // decide where to go instead of being bounced to the board.
+        if (!cancelled) setNotFound(true);
       } finally {
         if (!cancelled) setIsLoading(false);
       }
@@ -82,14 +99,7 @@ export default function TaskDetailPage() {
     return () => {
       cancelled = true;
     };
-  }, [params.id, router]);
-
-  // Flush any pending description save when leaving the page.
-  useEffect(() => {
-    return () => {
-      if (descriptionTimer.current) clearTimeout(descriptionTimer.current);
-    };
-  }, []);
+  }, [params.id]);
 
   const patch = useCallback(
     async (changes: Record<string, unknown>) => {
@@ -124,25 +134,12 @@ export default function TaskDetailPage() {
     await patch({ title: next });
   };
 
-  /** Debounced: Tiptap fires onChange on every keystroke. */
-  const handleDescriptionChange = (content: string) => {
-    if (!task) return;
-    if (descriptionTimer.current) clearTimeout(descriptionTimer.current);
-    setIsSavingDescription(true);
-
-    descriptionTimer.current = setTimeout(async () => {
-      await patch({ description: content });
-      setIsSavingDescription(false);
-    }, DESCRIPTION_SAVE_DELAY);
-  };
-
   const handleDelete = async () => {
     if (!task) return;
-    if (!confirm("Delete this task? This cannot be undone.")) return;
-
     try {
       const response = await fetch(`/api/tasks/${task.id}`, { method: "DELETE" });
       if (!response.ok) throw new Error("Delete failed");
+      notify.success("Task deleted");
       router.push("/board");
     } catch (error) {
       console.error("Failed to delete task:", error);
@@ -150,9 +147,7 @@ export default function TaskDetailPage() {
     }
   };
 
-  const handleUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
-    const files = Array.from(event.target.files ?? []);
-    event.target.value = "";
+  const uploadFiles = async (files: File[]) => {
     if (!task || files.length === 0) return;
 
     setIsUploading(true);
@@ -188,6 +183,12 @@ export default function TaskDetailPage() {
     }
   };
 
+  const handleUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(event.target.files ?? []);
+    event.target.value = "";
+    await uploadFiles(files);
+  };
+
   const handleRemoveAttachment = async (attachment: Attachment) => {
     try {
       const response = await fetch(`/api/attachments/${attachment.id}`, {
@@ -220,36 +221,84 @@ export default function TaskDetailPage() {
     );
   };
 
-  if (isLoading) {
+  if (isLoading) return <DetailSkeleton />;
+
+  if (notFound || !task) {
     return (
-      <div className="p-6 space-y-4">
-        <Skeleton className="h-10 w-1/3" />
-        <Skeleton className="h-64 w-full" />
+      <div className="flex h-full flex-col items-center justify-center gap-3 p-6 text-center">
+        <span className="flex h-12 w-12 items-center justify-center rounded-full bg-muted">
+          <FileText className="h-5 w-5 text-muted-foreground" />
+        </span>
+        <h1 className="font-display text-lg font-semibold">Task not found</h1>
+        <p className="max-w-sm text-sm text-muted-foreground">
+          It may have been deleted, or the link is out of date.
+        </p>
+        {/* Base UI composes via `render`, not Radix's asChild. */}
+        <Button
+          variant="outline"
+          className="mt-1"
+          render={<Link href="/board" />}
+        >
+          Back to board
+        </Button>
       </div>
     );
   }
 
-  if (!task) return null;
+  const due = task.dueDate ? new Date(task.dueDate) : null;
+  const isOverdue = due !== null && due < new Date() && task.status !== "DONE";
 
   return (
     <div className="enter flex h-full flex-col">
+      {/* Sticky so status and title stay reachable while reading a long
+          description; the detail page is the one screen that really scrolls. */}
       <header
         data-status={task.status}
-        className="relative border-b bg-card/60 px-6 py-5 backdrop-blur"
+        className="sticky top-0 z-20 border-b bg-card/80 px-6 py-4 backdrop-blur-md"
       >
         {/* The task's status colour, carried through from board and list. */}
         <span
           aria-hidden
           className="absolute inset-x-0 top-0 h-1 bg-[var(--tone)]"
         />
+
+        <nav
+          aria-label="Breadcrumb"
+          className="mb-2 flex items-center gap-1.5 text-xs text-muted-foreground"
+        >
+          <Link
+            href="/board"
+            className="rounded px-1 py-0.5 transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
+          >
+            Board
+          </Link>
+          <span aria-hidden>/</span>
+          <span className="flex items-center gap-1.5 text-foreground">
+            <StatusDot status={task.status} />
+            {STATUS_ITEMS[task.status]}
+          </span>
+        </nav>
+
         <div className="flex items-start justify-between gap-4">
           <div className="flex min-w-0 flex-1 items-start gap-2">
+            {/* A real link, so middle-click and "open in new tab" behave, but a
+                plain click prefers going back — returning the user to the list
+                or calendar they came from rather than always the board. The
+                decision is made at click time; deriving it during render would
+                mean reading browser history in an effect. */}
             <Button
               variant="ghost"
               size="icon"
               className="mt-0.5 shrink-0"
-              onClick={() => router.push("/board")}
-              aria-label="Back to board"
+              aria-label="Go back"
+              render={<Link href="/board" />}
+              onClick={(event) => {
+                if (event.metaKey || event.ctrlKey || event.shiftKey) return;
+                if (ENTRY_PATH !== window.location.pathname) {
+                  event.preventDefault();
+                  router.back();
+                }
+              }}
             >
               <ArrowLeft className="h-5 w-5" />
             </Button>
@@ -269,7 +318,7 @@ export default function TaskDetailPage() {
                 aria-label="Task title"
                 className={cn(
                   "font-display h-auto rounded-lg border-transparent bg-transparent px-2 py-1",
-                  "text-2xl font-bold tracking-tight shadow-none",
+                  "text-2xl font-bold leading-tight tracking-tight shadow-none",
                   "hover:bg-muted/60 focus-visible:border-input focus-visible:bg-background"
                 )}
               />
@@ -282,13 +331,31 @@ export default function TaskDetailPage() {
                     <UserChip user={task.assignee} />
                   </>
                 )}
+                {due && (
+                  <>
+                    <span className="text-muted-foreground/40">·</span>
+                    <span
+                      className={cn(
+                        "inline-flex items-center gap-1 text-xs font-medium",
+                        isOverdue ? "text-destructive" : "text-muted-foreground"
+                      )}
+                    >
+                      <CalendarClock className="h-3.5 w-3.5" />
+                      {isOverdue ? "Overdue · " : "Due "}
+                      {due.toLocaleDateString(undefined, {
+                        day: "numeric",
+                        month: "short",
+                      })}
+                    </span>
+                  </>
+                )}
               </div>
             </div>
           </div>
           <Button
             variant="ghost"
             size="icon"
-            onClick={handleDelete}
+            onClick={() => setIsConfirmingDelete(true)}
             aria-label="Delete task"
             className="text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
           >
@@ -301,34 +368,44 @@ export default function TaskDetailPage() {
         <div className="mx-auto grid max-w-6xl grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1fr)_320px]">
           <div className="min-w-0 space-y-5">
             <Card>
-              <CardHeader className="flex-row items-center justify-between space-y-0">
-                <CardTitle className="flex items-center gap-2 text-base"><AlignLeft className="h-4 w-4 text-muted-foreground" />Description</CardTitle>
-                <span className="flex items-center gap-1 text-xs text-muted-foreground">
-                  {isSavingDescription ? (
-                    <>
-                      <Loader2 className="h-3 w-3 animate-spin" />
-                      Saving…
-                    </>
-                  ) : (
-                    <>
-                      <Check className="h-3 w-3" />
-                      Saved
-                    </>
-                  )}
-                </span>
+              <CardHeader className="pb-2">
+                <CardTitle className="flex items-center gap-2 text-base">
+                  <AlignLeft className="h-4 w-4 text-muted-foreground" />
+                  Description
+                </CardTitle>
               </CardHeader>
               <CardContent>
-                <TiptapEditor
-                  content={task.description ?? ""}
-                  onChange={handleDescriptionChange}
+                <RichTextField
+                  value={task.description}
+                  onSave={(html) => patch({ description: html })}
                   placeholder="Add a detailed description…"
+                  emptyLabel="No description yet — click to add one."
                 />
               </CardContent>
             </Card>
 
-            <Card>
+            <Card
+              onDragOver={(e) => {
+                e.preventDefault();
+                setIsDropTarget(true);
+              }}
+              onDragLeave={() => setIsDropTarget(false)}
+              onDrop={(e) => {
+                e.preventDefault();
+                setIsDropTarget(false);
+                void uploadFiles(Array.from(e.dataTransfer.files));
+              }}
+              className={cn(
+                "transition-colors",
+                isDropTarget && "border-primary/50 bg-primary/5"
+              )}
+            >
               <CardHeader className="flex-row items-center justify-between space-y-0">
-                <CardTitle className="flex items-center gap-2 text-base"><Paperclip className="h-4 w-4 text-muted-foreground" />Attachments<span className="rounded-full bg-muted px-1.5 text-xs font-semibold tabular-nums text-muted-foreground">{task.attachments.length}</span></CardTitle>
+                <CardTitle className="flex items-center gap-2 text-base">
+                  <Paperclip className="h-4 w-4 text-muted-foreground" />
+                  Attachments
+                  <Count value={task.attachments.length} />
+                </CardTitle>
                 {task.attachments.length > 0 && (
                   <Button
                     size="sm"
@@ -357,10 +434,17 @@ export default function TaskDetailPage() {
                   <button
                     type="button"
                     onClick={() => fileInputRef.current?.click()}
-                    className="flex w-full flex-col items-center gap-1.5 rounded-lg border border-dashed py-6 text-center transition-colors hover:border-primary/40 hover:bg-muted/40"
+                    disabled={isUploading}
+                    className="flex w-full flex-col items-center gap-1.5 rounded-lg border border-dashed py-6 text-center transition-colors hover:border-primary/40 hover:bg-muted/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
                   >
-                    <Upload className="h-5 w-5 text-muted-foreground" />
-                    <span className="text-sm font-medium">Drop files here</span>
+                    {isUploading ? (
+                      <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+                    ) : (
+                      <Upload className="h-5 w-5 text-muted-foreground" />
+                    )}
+                    <span className="text-sm font-medium">
+                      {isUploading ? "Uploading…" : "Drop files here"}
+                    </span>
                     <span className="text-xs text-muted-foreground">
                       or click to browse
                     </span>
@@ -375,7 +459,7 @@ export default function TaskDetailPage() {
                             href={attachment.url}
                             target="_blank"
                             rel="noopener noreferrer"
-                            className="lift block overflow-hidden rounded-lg border bg-card"
+                            className="lift block overflow-hidden rounded-lg border bg-card focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
                           >
                             {/* Images preview; everything else gets an icon tile. */}
                             <div className="flex h-24 items-center justify-center overflow-hidden bg-muted/60">
@@ -402,8 +486,8 @@ export default function TaskDetailPage() {
                           <button
                             type="button"
                             aria-label={`Remove ${attachment.filename}`}
-                            onClick={() => handleRemoveAttachment(attachment)}
-                            className="absolute right-1.5 top-1.5 rounded-md bg-background/90 p-1 opacity-0 shadow-sm transition-opacity group-hover:opacity-100 hover:text-destructive"
+                            onClick={() => setPendingRemoval(attachment)}
+                            className="absolute right-1.5 top-1.5 rounded-md bg-background/90 p-1 opacity-0 shadow-sm transition-opacity group-hover:opacity-100 focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50 hover:text-destructive"
                           >
                             <X className="h-3.5 w-3.5" />
                           </button>
@@ -417,7 +501,11 @@ export default function TaskDetailPage() {
 
             <Card>
               <CardHeader>
-                <CardTitle className="flex items-center gap-2 text-base"><MessageSquare className="h-4 w-4 text-muted-foreground" />Comments<span className="rounded-full bg-muted px-1.5 text-xs font-semibold tabular-nums text-muted-foreground">{task.comments.length}</span></CardTitle>
+                <CardTitle className="flex items-center gap-2 text-base">
+                  <MessageSquare className="h-4 w-4 text-muted-foreground" />
+                  Comments
+                  <Count value={task.comments.length} />
+                </CardTitle>
               </CardHeader>
               <CardContent>
                 <CommentList
@@ -429,14 +517,14 @@ export default function TaskDetailPage() {
             </Card>
           </div>
 
-          <div className="space-y-5 lg:sticky lg:top-6 lg:self-start">
+          <div className="space-y-5 lg:sticky lg:top-28 lg:self-start">
             <Card>
               <CardHeader className="pb-3">
                 <CardTitle className="text-base">Details</CardTitle>
               </CardHeader>
               <CardContent className="space-y-4">
                 <div className="space-y-2">
-                  <label className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Status</label>
+                  <label className={FIELD_LABEL}>Status</label>
                   <Select
                     items={STATUS_ITEMS}
                     value={task.status}
@@ -446,17 +534,22 @@ export default function TaskDetailPage() {
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="BACKLOG">Backlog</SelectItem>
-                      <SelectItem value="TODO">To Do</SelectItem>
-                      <SelectItem value="IN_PROGRESS">In Progress</SelectItem>
-                      <SelectItem value="IN_REVIEW">In Review</SelectItem>
-                      <SelectItem value="DONE">Done</SelectItem>
+                      {(Object.keys(STATUS_ITEMS) as Array<keyof typeof STATUS_ITEMS>).map(
+                        (value) => (
+                          <SelectItem key={value} value={value}>
+                            <span className="flex items-center gap-2">
+                              <StatusDot status={value as Task["status"]} />
+                              {STATUS_ITEMS[value]}
+                            </span>
+                          </SelectItem>
+                        )
+                      )}
                     </SelectContent>
                   </Select>
                 </div>
 
                 <div className="space-y-2">
-                  <label className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Priority</label>
+                  <label className={FIELD_LABEL}>Priority</label>
                   <Select
                     items={PRIORITY_ITEMS}
                     value={task.priority}
@@ -466,11 +559,13 @@ export default function TaskDetailPage() {
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="NONE">No Priority</SelectItem>
-                      <SelectItem value="LOW">Low</SelectItem>
-                      <SelectItem value="MEDIUM">Medium</SelectItem>
-                      <SelectItem value="HIGH">High</SelectItem>
-                      <SelectItem value="URGENT">Urgent</SelectItem>
+                      {(
+                        Object.keys(PRIORITY_ITEMS) as Array<keyof typeof PRIORITY_ITEMS>
+                      ).map((value) => (
+                        <SelectItem key={value} value={value}>
+                          <PriorityBadge priority={value as Task["priority"]} />
+                        </SelectItem>
+                      ))}
                     </SelectContent>
                   </Select>
                 </div>
@@ -478,33 +573,35 @@ export default function TaskDetailPage() {
                 <Separator />
 
                 <div className="space-y-2">
-                  <label className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Assignee</label>
+                  <label className={FIELD_LABEL}>Assignee</label>
                   <AssigneePicker
                     value={task.assigneeId}
                     onChange={(assigneeId) => patch({ assigneeId })}
                   />
+                  <p className="text-[11px] text-muted-foreground">
+                    They get an email when assigned.
+                  </p>
                 </div>
 
                 <Separator />
 
                 <div className="space-y-2">
-                  <label className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground" htmlFor="due">
+                  <label className={FIELD_LABEL} htmlFor="due">
                     Due date
                   </label>
                   <Input
                     id="due"
                     type="date"
                     value={toDateInput(task.dueDate)}
-                    onChange={(e) =>
-                      patch({ dueDate: e.target.value || null })
-                    }
+                    onChange={(e) => patch({ dueDate: e.target.value || null })}
+                    className={cn(isOverdue && "border-destructive/50 text-destructive")}
                   />
                 </div>
 
                 <Separator />
 
                 <div className="space-y-2">
-                  <label className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Created by</label>
+                  <label className={FIELD_LABEL}>Created by</label>
                   {task.createdBy ? (
                     <UserChip user={task.createdBy} showEmail />
                   ) : (
@@ -537,6 +634,60 @@ export default function TaskDetailPage() {
               </Card>
             )}
           </div>
+        </div>
+      </div>
+
+      <ConfirmDialog
+        open={isConfirmingDelete}
+        onOpenChange={setIsConfirmingDelete}
+        title="Delete this task?"
+        description={`"${task.title}" and its comments and attachments will be removed. This cannot be undone.`}
+        confirmLabel="Delete task"
+        destructive
+        onConfirm={handleDelete}
+      />
+
+      <ConfirmDialog
+        open={pendingRemoval !== null}
+        onOpenChange={(open) => !open && setPendingRemoval(null)}
+        title="Remove this attachment?"
+        description={pendingRemoval?.filename}
+        confirmLabel="Remove"
+        destructive
+        onConfirm={async () => {
+          if (pendingRemoval) await handleRemoveAttachment(pendingRemoval);
+          setPendingRemoval(null);
+        }}
+      />
+    </div>
+  );
+}
+
+/** Small pill for the counts in card titles. */
+function Count({ value }: { value: number }) {
+  return (
+    <span className="rounded-full bg-muted px-1.5 text-xs font-semibold tabular-nums text-muted-foreground">
+      {value}
+    </span>
+  );
+}
+
+/** Mirrors the real layout so the page doesn't jump when data lands. */
+function DetailSkeleton() {
+  return (
+    <div className="flex h-full flex-col">
+      <div className="border-b px-6 py-4">
+        <Skeleton className="h-3 w-28" />
+        <Skeleton className="mt-3 h-8 w-1/2" />
+        <Skeleton className="mt-2 h-4 w-64" />
+      </div>
+      <div className="flex-1 p-6">
+        <div className="mx-auto grid max-w-6xl grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1fr)_320px]">
+          <div className="space-y-5">
+            <Skeleton className="h-56 rounded-xl" />
+            <Skeleton className="h-40 rounded-xl" />
+          </div>
+          <Skeleton className="h-80 rounded-xl" />
         </div>
       </div>
     </div>
