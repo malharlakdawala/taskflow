@@ -32,9 +32,12 @@ export function Sidebar({ user }: { user: SessionUser }) {
   const { theme, setTheme } = useTheme();
 
   const isAdmin = user.role === "ADMIN";
-  const links = isAdmin
-    ? [...navigation, { name: "Settings", href: "/settings", icon: Settings }]
-    : navigation;
+  // Settings is for everyone now — members manage their own MCP tokens there.
+  // The page itself decides which tabs they get.
+  const links = [
+    ...navigation,
+    { name: "Settings", href: "/settings", icon: Settings },
+  ];
 
   return (
     <div className="flex h-full w-64 shrink-0 flex-col border-r bg-sidebar">

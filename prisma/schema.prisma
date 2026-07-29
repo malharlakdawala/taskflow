@@ -87,6 +87,7 @@ model User {
   comments      Comment[]
   notifications Notification[] @relation("NotificationRecipient")
   actedOn       Notification[] @relation("NotificationActor")
+  apiTokens     ApiToken[]
   createdAt     DateTime       @default(now()) @db.Timestamptz(6)
   updatedAt     DateTime       @updatedAt @db.Timestamptz(6)
 
@@ -161,6 +162,24 @@ model Notification {
 
   @@index([userId, createdAt(sort: Desc)], map: "Notification_userId_createdAt_idx")
   @@index([taskId], map: "Notification_taskId_idx")
+}
+
+/// Personal access token for the hosted MCP endpoint.
+///
+/// Only the hash is stored, so the plaintext exists exactly once — in the
+/// response that created it. `prefix` is the visible stub the settings screen
+/// lists a token by.
+model ApiToken {
+  id         String    @id @default(uuid()) @db.Uuid
+  userId     String    @db.Uuid
+  user       User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  name       String
+  prefix     String
+  tokenHash  String    @unique
+  lastUsedAt DateTime? @db.Timestamptz(6)
+  createdAt  DateTime  @default(now()) @db.Timestamptz(6)
+
+  @@index([userId], map: "ApiToken_userId_idx")
 }
 
 model Attachment {

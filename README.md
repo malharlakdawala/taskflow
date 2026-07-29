@@ -39,7 +39,10 @@ integration over the Model Context Protocol.
 - **File Attachments** — Uploads to Supabase Storage, recorded against the task
 - **Admin Settings** — Approve or decline new sign-ups, manage roles
 - **Dark Mode**
-- **MCP Server** — Manage tasks from the terminal
+- **MCP** — Every member can connect their own terminal from Settings → MCP:
+  generate a personal token and point Claude Code, Cursor or any MCP client at
+  the hosted `/api/mcp` endpoint. Calls run as that member, with the same
+  permissions and notifications as the web app
 
 ## Architecture Notes
 
@@ -149,14 +152,45 @@ database. If you move the database, move this too.
 - API routes validate every payload with Zod and write only allow-listed
   columns.
 
-## MCP Server — Terminal Integration
+## MCP — Terminal Integration
 
-`mcp-server/` is a standalone MCP server for managing tasks from any
-MCP-compatible client (Claude Code, Cursor, OpenCode…).
+There are two ways to drive TaskFlow from an MCP client. **The hosted endpoint
+is the one to give people.**
 
-It connects **directly to Postgres**, not through the Supabase REST API,
-because the `taskflow` schema is intentionally not reachable with the public
-anon key.
+### Hosted endpoint (`/api/mcp`) — for everyone
+
+Each member opens **Settings → MCP**, generates a personal token, and copies
+the connect command:
+
+```bash
+claude mcp add --transport http taskflow https://your-app/api/mcp \
+  --header "Authorization: Bearer tf_live_…"
+```
+
+The token authorises the endpoint to act as that one member. Requests run
+through the same Prisma code the web UI uses, so permissions, validation and
+notifications all apply — a task assigned from a terminal reaches its new owner
+exactly as one assigned from the board does. Only a SHA-256 hash of the token
+is stored; the plaintext is shown once, at creation, and revoking is immediate.
+
+Tools: `list_tasks`, `get_task`, `create_task`, `update_task`, `move_task`,
+`delete_task`, `add_comment`, `list_members`.
+
+The transport is Streamable HTTP in JSON mode — one JSON-RPC request per POST,
+no SSE stream and no session id, because every call is a single database
+round-trip. It is implemented directly rather than through the SDK's
+`StreamableHTTPServerTransport`, which is written against Node's
+`IncomingMessage`/`ServerResponse` while a route handler is handed a Web
+`Request`.
+
+### Local stdio server (`mcp-server/`) — for whoever owns the database
+
+`mcp-server/` connects **directly to Postgres**, because the `taskflow` schema
+is intentionally not reachable with the public anon key.
+
+> **Running it requires `DATABASE_URL`, which reaches every table in the
+> project — including the other application's tables in `public`.** Do not hand
+> it to team members; point them at the hosted endpoint instead.
 
 ### Setup
 
@@ -256,6 +290,7 @@ src/
 ├── lib/
 │   ├── auth.ts          # Session helpers + auth-to-User reconciliation
 │   ├── email/           # Brevo client + email markup
+│   ├── mcp/             # Personal access tokens + the hosted MCP tools
 │   ├── notifications/   # Who gets told what, over which channel
 │   ├── prisma.ts        # Prisma client singleton (taskflow schema)
 │   ├── storage.ts       # Supabase Storage upload helpers
