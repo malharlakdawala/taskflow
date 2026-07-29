@@ -17,6 +17,7 @@ import Link from "next/link";
 import { CreateTaskDialog } from "@/components/tasks/create-task-dialog";
 import { StatusBadge, PriorityBadge } from "@/components/tasks/status-badge";
 import { notify } from "@/lib/notify";
+import { cn } from "@/lib/utils";
 import type { Task, TaskStatus, TaskPriority } from "@/lib/types";
 import { STATUS_ITEMS, PRIORITY_ITEMS } from "@/lib/types";
 
@@ -111,11 +112,24 @@ export default function DashboardPage() {
         <div>
           <h1 className="text-3xl font-bold tracking-tight">{greeting()}</h1>
           <p className="mt-1 text-sm text-muted-foreground">
-            {total === 0
-              ? "Nothing on your plate yet."
-              : `${total - done} open · ${done} done${
-                  stats.overdue > 0 ? ` · ${stats.overdue} overdue` : ""
-                }`}
+            {total === 0 ? (
+              "Nothing on your plate yet."
+            ) : (
+              <>
+                {total - done} open · {done} done
+                {stats.overdue > 0 && (
+                  <>
+                    {" · "}
+                    <Link
+                      href="/list?due=overdue"
+                      className="font-medium text-destructive underline-offset-2 hover:underline"
+                    >
+                      {stats.overdue} overdue
+                    </Link>
+                  </>
+                )}
+              </>
+            )}
           </p>
         </div>
         <Button onClick={() => setIsCreateDialogOpen(true)} className="gap-2">
@@ -125,12 +139,15 @@ export default function DashboardPage() {
       </div>
 
       <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-4">
+        {/* Every tile is a link into the list, filtered to exactly the tasks it
+            counted. A number you can't act on just tells you to go looking. */}
         <StatCard
           label="Total tasks"
           value={total}
           hint={`${completion}% complete`}
           icon={Layers}
           tone="var(--primary)"
+          href="/list"
         />
         <StatCard
           label="Urgent"
@@ -138,6 +155,7 @@ export default function DashboardPage() {
           hint={urgent > 0 ? "Needs attention now" : "Nothing on fire"}
           icon={Flame}
           tone="var(--priority-urgent)"
+          href="/list?priority=URGENT"
         />
         <StatCard
           label="In progress"
@@ -145,6 +163,7 @@ export default function DashboardPage() {
           hint="Being worked on"
           icon={Timer}
           tone="var(--status-progress)"
+          href="/list?status=IN_PROGRESS"
         />
         <StatCard
           label="Completed"
@@ -152,6 +171,7 @@ export default function DashboardPage() {
           hint={`${completion}% of all tasks`}
           icon={CheckCircle2}
           tone="var(--status-done)"
+          href="/list?status=DONE"
         />
       </div>
 
@@ -168,6 +188,7 @@ export default function DashboardPage() {
                 label={STATUS_ITEMS[status]}
                 count={stats.byStatus[status] ?? 0}
                 total={total}
+                href={`/list?status=${status}`}
               />
             ))}
           </CardContent>
@@ -185,6 +206,7 @@ export default function DashboardPage() {
                 label={PRIORITY_ITEMS[priority]}
                 count={stats.byPriority[priority] ?? 0}
                 total={total}
+                href={`/list?priority=${priority}`}
               />
             ))}
           </CardContent>
@@ -269,44 +291,53 @@ function StatCard({
   hint,
   icon: Icon,
   tone,
+  href,
 }: {
   label: string;
   value: number;
   hint: string;
   icon: React.ComponentType<{ className?: string }>;
   tone: string;
+  /** Where the tile's own tasks live. */
+  href: string;
 }) {
   return (
-    <Card
-      className="lift relative overflow-hidden"
-      style={{ ["--tone" as string]: tone }}
+    <Link
+      href={href}
+      aria-label={`${label}: ${value}. Show these in the list`}
+      className="rounded-xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
     >
-      {/* Each tile is topped by its own metric's colour so the four read apart. */}
-      <span
-        aria-hidden
-        className="absolute inset-x-0 top-0 h-0.5 bg-[var(--tone)]"
-      />
-      <CardContent className="flex items-start justify-between gap-3 p-5">
-        <div className="min-w-0">
-          <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-            {label}
-          </p>
-          <p className="font-display mt-1.5 text-3xl font-bold leading-none tabular-nums">
-            {value}
-          </p>
-          <p className="mt-1.5 truncate text-xs text-muted-foreground">{hint}</p>
-        </div>
+      <Card
+        className="lift relative h-full overflow-hidden transition-colors hover:border-[var(--tone)]/40"
+        style={{ ["--tone" as string]: tone }}
+      >
+        {/* Each tile is topped by its own metric's colour so the four read apart. */}
         <span
-          className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg"
-          style={{
-            backgroundColor: "color-mix(in oklch, var(--tone) 14%, transparent)",
-            color: "var(--tone)",
-          }}
-        >
-          <Icon className="h-[18px] w-[18px]" />
-        </span>
-      </CardContent>
-    </Card>
+          aria-hidden
+          className="absolute inset-x-0 top-0 h-0.5 bg-[var(--tone)]"
+        />
+        <CardContent className="flex items-start justify-between gap-3 p-5">
+          <div className="min-w-0">
+            <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+              {label}
+            </p>
+            <p className="font-display mt-1.5 text-3xl font-bold leading-none tabular-nums">
+              {value}
+            </p>
+            <p className="mt-1.5 truncate text-xs text-muted-foreground">{hint}</p>
+          </div>
+          <span
+            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg"
+            style={{
+              backgroundColor: "color-mix(in oklch, var(--tone) 14%, transparent)",
+              color: "var(--tone)",
+            }}
+          >
+            <Icon className="h-[18px] w-[18px]" />
+          </span>
+        </CardContent>
+      </Card>
+    </Link>
   );
 }
 
@@ -315,16 +346,28 @@ function Meter({
   label,
   count,
   total,
+  href,
 }: {
   attr: Record<string, string>;
   label: string;
   count: number;
   total: number;
+  href: string;
 }) {
   const percentage = total > 0 ? (count / total) * 100 : 0;
 
   return (
-    <div {...attr} className="space-y-1.5">
+    <Link
+      {...attr}
+      href={href}
+      aria-label={`${label}: ${count}. Show these in the list`}
+      className={cn(
+        // Pulled out to the card's padding edge so the hover surface lines up
+        // with the row rather than floating inside it.
+        "-mx-2 block space-y-1.5 rounded-md px-2 py-1 transition-colors",
+        "hover:bg-muted/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
+      )}
+    >
       <div className="flex items-center justify-between text-sm">
         <span className="flex items-center gap-2 font-medium">
           <span className="h-2 w-2 rounded-full bg-[var(--tone)]" />
@@ -338,6 +381,6 @@ function Meter({
           style={{ width: `${percentage}%` }}
         />
       </div>
-    </div>
+    </Link>
   );
 }

@@ -1,7 +1,8 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
-import { useRouter } from "next/navigation";
+import { Suspense, useCallback, useEffect, useMemo, useState } from "react";
+import Link from "next/link";
+import { useRouter, useSearchParams } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -11,6 +12,7 @@ import {
   ListTodo,
   MessageSquare,
   Paperclip,
+  X,
 } from "lucide-react";
 import { CreateTaskDialog } from "@/components/tasks/create-task-dialog";
 import { BulkActionBar } from "@/components/tasks/bulk-action-bar";
@@ -23,8 +25,8 @@ import {
 } from "@/components/tasks/inline-fields";
 import { notify } from "@/lib/notify";
 import { cn } from "@/lib/utils";
-import type { Task, TaskStatus } from "@/lib/types";
-import { STATUS_ITEMS } from "@/lib/types";
+import type { Task, TaskPriority, TaskStatus } from "@/lib/types";
+import { PRIORITY_ITEMS, STATUS_ITEMS } from "@/lib/types";
 
 /** Active work first, finished work last — the order you actually scan in. */
 const GROUPS: TaskStatus[] = [
@@ -39,14 +41,73 @@ const GROUPS: TaskStatus[] = [
 const GRID =
   "grid grid-cols-[36px_minmax(0,1fr)_150px_140px_180px_120px] items-center gap-3";
 
+/**
+ * Filters come from the URL rather than component state, so the dashboard's
+ * counts can be links. A number nobody can click is a dead end: seeing "4 in
+ * progress" and then having to go and find those four by hand is the whole
+ * problem with a stats page.
+ */
+type Filters = {
+  status: TaskStatus | null;
+  priority: TaskPriority | null;
+  overdue: boolean;
+};
+
+const isActive = (filters: Filters) =>
+  filters.status !== null || filters.priority !== null || filters.overdue;
+
+/** Anything unrecognised in the query string is ignored rather than fatal. */
+function parseFilters(params: URLSearchParams): Filters {
+  const status = params.get("status");
+  const priority = params.get("priority");
+  return {
+    status: status && status in STATUS_ITEMS ? (status as TaskStatus) : null,
+    priority:
+      priority && priority in PRIORITY_ITEMS ? (priority as TaskPriority) : null,
+    overdue: params.get("due") === "overdue",
+  };
+}
+
+/** `/list` plus everything still active once `drop` is removed. */
+function urlWithout(filters: Filters, drop: keyof Filters): string {
+  const next = new URLSearchParams();
+  if (drop !== "status" && filters.status) next.set("status", filters.status);
+  if (drop !== "priority" && filters.priority)
+    next.set("priority", filters.priority);
+  if (drop !== "overdue" && filters.overdue) next.set("due", "overdue");
+  const query = next.toString();
+  return query ? `/list?${query}` : "/list";
+}
+
 export default function ListPage() {
+  // useSearchParams opts the tree out of prerendering, so it gets its own
+  // boundary rather than dragging the whole route client-side.
+  return (
+    <Suspense fallback={<ListSkeleton />}>
+      <ListView />
+    </Suspense>
+  );
+}
+
+function ListView() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const filters = useMemo(
+    () => parseFilters(new URLSearchParams(searchParams.toString())),
+    [searchParams]
+  );
   const [tasks, setTasks] = useState<Task[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
   const [createIn, setCreateIn] = useState<TaskStatus | undefined>();
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [collapsed, setCollapsed] = useState<Set<TaskStatus>>(new Set());
+  /**
+   * "Overdue" is measured against when the data arrived, not when React
+   * happens to re-render. Reading the clock during render would make the
+   * filtered set depend on how often the component updates.
+   */
+  const [loadedAt, setLoadedAt] = useState(0);
 
   useEffect(() => {
     let cancelled = false;
@@ -56,7 +117,10 @@ export default function ListPage() {
         const response = await fetch("/api/tasks");
         if (!response.ok) throw new Error("Failed to load tasks");
         const data: Task[] = await response.json();
-        if (!cancelled) setTasks(data);
+        if (!cancelled) {
+          setTasks(data);
+          setLoadedAt(Date.now());
+        }
       } catch (error) {
         console.error("Failed to fetch tasks:", error);
         if (!cancelled) notify.error("Could not load tasks");
@@ -71,14 +135,46 @@ export default function ListPage() {
     };
   }, []);
 
+  const visible = useMemo(() => {
+    if (!isActive(filters)) return tasks;
+
+    return tasks.filter((task) => {
+      if (filters.status && task.status !== filters.status) return false;
+      if (filters.priority && task.priority !== filters.priority) return false;
+      if (filters.overdue) {
+        // Matches the dashboard's definition — a finished task is never late.
+        if (!task.dueDate || task.status === "DONE") return false;
+        if (new Date(task.dueDate).getTime() >= loadedAt) return false;
+      }
+      return true;
+    });
+  }, [tasks, filters, loadedAt]);
+
   const grouped = useMemo(() => {
     const map = Object.fromEntries(
       GROUPS.map((s) => [s, [] as Task[]])
     ) as Record<TaskStatus, Task[]>;
-    for (const task of tasks) map[task.status]?.push(task);
+    for (const task of visible) map[task.status]?.push(task);
     for (const status of GROUPS) map[status].sort((a, b) => a.order - b.order);
     return map;
-  }, [tasks]);
+  }, [visible]);
+
+  // Filtering down to one status and still showing four empty "Add a task to…"
+  // sections reads as broken, so empty groups drop out while a filter is on.
+  const groups = useMemo(
+    () => (isActive(filters) ? GROUPS.filter((s) => grouped[s].length > 0) : GROUPS),
+    [filters, grouped]
+  );
+
+  const chips: Array<{ key: keyof Filters; label: string }> = [];
+  if (filters.status)
+    chips.push({ key: "status", label: `Status: ${STATUS_ITEMS[filters.status]}` });
+  if (filters.priority)
+    chips.push({
+      key: "priority",
+      label: `Priority: ${PRIORITY_ITEMS[filters.priority]}`,
+    });
+  if (filters.overdue) chips.push({ key: "overdue", label: "Overdue" });
 
   /** Optimistic: the row changes instantly and reverts if the save fails. */
   const patch = useCallback(
@@ -127,55 +223,114 @@ export default function ListPage() {
       return next;
     });
 
-  const allSelected = tasks.length > 0 && selected.size === tasks.length;
+  // A selection made before filtering can include rows that are now hidden.
+  // Intersecting keeps the bulk bar honest — it should only ever act on what
+  // the user can currently see.
+  const visibleIds = useMemo(
+    () => new Set(visible.map((task) => task.id)),
+    [visible]
+  );
+  const selectedVisible = useMemo(
+    () => [...selected].filter((id) => visibleIds.has(id)),
+    [selected, visibleIds]
+  );
+  const allSelected =
+    visible.length > 0 && selectedVisible.length === visible.length;
 
   const openCreate = (status?: TaskStatus) => {
     setCreateIn(status);
     setIsCreateDialogOpen(true);
   };
 
-  if (isLoading) {
-    return (
-      <div className="space-y-3 p-6">
-        <Skeleton className="h-10 w-1/3" />
-        {Array.from({ length: 6 }).map((_, i) => (
-          <Skeleton key={i} className="h-12 w-full" />
-        ))}
-      </div>
-    );
-  }
+  if (isLoading) return <ListSkeleton />;
 
   return (
     <div className="enter flex h-full flex-col">
-      <header className="flex items-center justify-between border-b bg-card/60 px-6 py-4 backdrop-blur">
-        <div>
-          <h1 className="text-2xl font-bold tracking-tight">List</h1>
-          <p className="text-sm text-muted-foreground">
-            {selected.size > 0
-              ? `${selected.size} selected`
-              : `${tasks.length} ${tasks.length === 1 ? "task" : "tasks"} · click a row to open it, or edit any field in place`}
-          </p>
+      <header className="border-b bg-card/60 px-6 py-4 backdrop-blur">
+        <div className="flex items-center justify-between gap-4">
+          <div className="min-w-0">
+            <h1 className="text-2xl font-bold tracking-tight">List</h1>
+            <p className="text-sm text-muted-foreground">
+              {selectedVisible.length > 0
+                ? `${selectedVisible.length} selected`
+                : `${visible.length} ${visible.length === 1 ? "task" : "tasks"}${
+                    isActive(filters) ? ` of ${tasks.length}` : ""
+                  } · click a row to open it, or edit any field in place`}
+            </p>
+          </div>
+          <Button onClick={() => openCreate()} className="gap-2">
+            <Plus className="h-4 w-4" />
+            New task
+          </Button>
         </div>
-        <Button onClick={() => openCreate()} className="gap-2">
-          <Plus className="h-4 w-4" />
-          New task
-        </Button>
+
+        {chips.length > 0 && (
+          <div className="mt-3 flex flex-wrap items-center gap-2">
+            <span className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+              Filtered by
+            </span>
+            {chips.map((chip) => (
+              // Each chip removes only itself, so arriving from "Urgent" and
+              // then narrowing to "In Progress" can be unwound one step at a
+              // time rather than all or nothing.
+              <Link
+                key={chip.key}
+                href={urlWithout(filters, chip.key)}
+                aria-label={`Remove filter ${chip.label}`}
+                className="group inline-flex items-center gap-1.5 rounded-full bg-primary/10 py-1 pl-2.5 pr-1.5 text-xs font-medium text-primary transition-colors hover:bg-primary/15 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
+              >
+                {chip.label}
+                <X className="h-3 w-3 opacity-60 transition-opacity group-hover:opacity-100" />
+              </Link>
+            ))}
+            {chips.length > 1 && (
+              <Link
+                href="/list"
+                className="text-xs text-muted-foreground underline-offset-2 hover:text-foreground hover:underline"
+              >
+                Clear all
+              </Link>
+            )}
+          </div>
+        )}
       </header>
 
       <div className="flex-1 overflow-auto px-6 py-5 pb-24">
-        {tasks.length === 0 ? (
+        {visible.length === 0 ? (
           <div className="flex flex-col items-center gap-2 rounded-xl border bg-card py-20 text-center">
             <span className="flex h-11 w-11 items-center justify-center rounded-full bg-muted">
               <ListTodo className="h-5 w-5 text-muted-foreground" />
             </span>
-            <p className="font-display text-base font-semibold">No tasks yet</p>
-            <p className="max-w-xs text-sm text-muted-foreground">
-              Create your first task and it will show up here.
-            </p>
-            <Button size="sm" className="mt-2 gap-2" onClick={() => openCreate()}>
-              <Plus className="h-4 w-4" />
-              New task
-            </Button>
+            {isActive(filters) ? (
+              <>
+                <p className="font-display text-base font-semibold">
+                  Nothing matches this filter
+                </p>
+                <p className="max-w-xs text-sm text-muted-foreground">
+                  {tasks.length} {tasks.length === 1 ? "task" : "tasks"} in total,
+                  none of them fit.
+                </p>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="mt-2"
+                  render={<Link href="/list" />}
+                >
+                  Show all tasks
+                </Button>
+              </>
+            ) : (
+              <>
+                <p className="font-display text-base font-semibold">No tasks yet</p>
+                <p className="max-w-xs text-sm text-muted-foreground">
+                  Create your first task and it will show up here.
+                </p>
+                <Button size="sm" className="mt-2 gap-2" onClick={() => openCreate()}>
+                  <Plus className="h-4 w-4" />
+                  New task
+                </Button>
+              </>
+            )}
           </div>
         ) : (
           <>
@@ -187,10 +342,10 @@ export default function ListPage() {
             >
               <Checkbox
                 checked={allSelected}
-                indeterminate={selected.size > 0 && !allSelected}
+                indeterminate={selectedVisible.length > 0 && !allSelected}
                 onCheckedChange={() =>
                   setSelected(
-                    allSelected ? new Set() : new Set(tasks.map((t) => t.id))
+                    allSelected ? new Set() : new Set(visible.map((t) => t.id))
                   )
                 }
                 aria-label="Select all tasks"
@@ -203,7 +358,7 @@ export default function ListPage() {
             </div>
 
             <div className="space-y-4">
-              {GROUPS.map((status) => {
+              {groups.map((status) => {
                 const rows = grouped[status];
                 const isCollapsed = collapsed.has(status);
 
@@ -351,7 +506,7 @@ export default function ListPage() {
       </div>
 
       <BulkActionBar
-        selectedIds={[...selected]}
+        selectedIds={selectedVisible}
         onClear={() => setSelected(new Set())}
         onApplied={(ids, changes) =>
           setTasks((prev) =>
@@ -372,6 +527,17 @@ export default function ListPage() {
         defaultStatus={createIn}
         onTaskCreated={(task) => setTasks((prev) => [task, ...prev])}
       />
+    </div>
+  );
+}
+
+function ListSkeleton() {
+  return (
+    <div className="space-y-3 p-6">
+      <Skeleton className="h-10 w-1/3" />
+      {Array.from({ length: 6 }).map((_, i) => (
+        <Skeleton key={i} className="h-12 w-full" />
+      ))}
     </div>
   );
 }

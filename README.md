@@ -19,9 +19,12 @@ integration over the Model Context Protocol.
 - **Kanban Board** — Drag and drop across status columns; position is persisted
 - **List View** — Sortable table of all tasks
 - **Calendar View** — Tasks laid out by due date
-- **Dashboard** — Stats overview with status and priority breakdowns
+- **Dashboard** — Stats overview with status and priority breakdowns. Every
+  count is a link into the list, filtered to exactly the tasks it counted
 - **List View** — Sortable, with multi-select and bulk edit of status, priority,
-  assignee and due date in a single request
+  assignee and due date in a single request. Filters live in the URL
+  (`/list?status=IN_PROGRESS`, `?priority=URGENT`, `?due=overdue`), so a
+  filtered view can be linked to and shared
 - **Assignees** — Pick an assignee on create or from the task detail view
 - **Rich Text Editor** — Tiptap with headings, lists, code blocks, links, tables,
   and image upload by file picker, paste, or drag-and-drop
