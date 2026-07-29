@@ -1,0 +1,63 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+# A new push to a PR makes the previous run pointless.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+
+    env:
+      # NEXT_PUBLIC_* values are inlined at build time, so `next build` fails
+      # outright when they are absent — see src/lib/supabase/config.ts. CI has
+      # no database and needs none: nothing here connects, it only compiles.
+      NEXT_PUBLIC_SUPABASE_URL: https://placeholder.supabase.co
+      NEXT_PUBLIC_SUPABASE_ANON_KEY: placeholder-anon-key
+
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+          cache: npm
+
+      # `npm ci` runs the postinstall hook, which is `prisma generate` — so the
+      # generated client exists before anything tries to typecheck against it.
+      - name: Install
+        run: npm ci
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Typecheck
+        run: npx tsc --noEmit
+
+      - name: Build
+        run: npm run build
+
+  mcp-server:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: mcp-server/package-lock.json
+
+      # The stdio server has its own package.json and is not covered by the
+      # web app's build, so it would rot unnoticed without this.
+      - name: Build the stdio MCP server
+        working-directory: mcp-server
+        run: |
+          npm ci
+          npm run build

@@ -1,7 +1,43 @@
-# TaskFlow — ClickUp-Style Task Manager
+<h1 align="center">TaskFlow</h1>
 
-A task management web app with rich text editing, a Kanban board, and terminal
-integration over the Model Context Protocol.
+<p align="center">
+  A self-hosted, ClickUp-style task manager for small teams —<br>
+  with a built-in MCP server, so your terminal is a first-class client.
+</p>
+
+<p align="center">
+  <a href="LICENSE"><img alt="MIT licence" src="https://img.shields.io/badge/licence-MIT-blue.svg"></a>
+  <a href="https://github.com/malharlakdawala/taskflow/actions/workflows/ci.yml"><img alt="CI" src="https://github.com/malharlakdawala/taskflow/actions/workflows/ci.yml/badge.svg"></a>
+  <img alt="Next.js 16" src="https://img.shields.io/badge/Next.js-16-black">
+  <img alt="Supabase" src="https://img.shields.io/badge/Supabase-Postgres-3ecf8e">
+</p>
+
+---
+
+Most task managers are either a hosted product you rent, or a self-hosted one
+that your tools can't reach. TaskFlow is neither: you own the database, and
+every member can point Claude Code, Cursor or any MCP client at it with a
+personal token — no shared credential, no separate integration to configure.
+
+**Board, list and calendar views. Rich text with pasted images. Comments,
+attachments, assignees, due dates. In-app notifications and email digests. And
+an MCP endpoint that runs as you, with the same permissions and the same
+notifications as the web app.**
+
+Deploy it on Vercel's free tier against a free Supabase project and it costs
+nothing to run for a team.
+
+## Screenshots
+
+> **Contributors:** these are not committed yet. If you'd like to help, add
+> screenshots with dummy data to `docs/screenshots/` and open a PR — real
+> workspace content should never be published here.
+
+<!--
+| Board | Task detail |
+|---|---|
+| ![Board](docs/screenshots/board.png) | ![Task detail](docs/screenshots/task-detail.png) |
+-->
 
 ## Tech Stack
 
@@ -17,7 +53,6 @@ integration over the Model Context Protocol.
 
 - **Authentication** — Email/password sign-up and login via Supabase Auth
 - **Kanban Board** — Drag and drop across status columns; position is persisted
-- **List View** — Sortable table of all tasks
 - **Calendar View** — Tasks laid out by due date
 - **Dashboard** — Stats overview with status and priority breakdowns. Every
   count is a link into the list, filtered to exactly the tasks it counted
@@ -44,19 +79,90 @@ integration over the Model Context Protocol.
   the hosted `/api/mcp` endpoint. Calls run as that member, with the same
   permissions and notifications as the web app
 
+## Quick start
+
+You need **Node.js 24** and a **Supabase project** (the free tier is plenty).
+There is no shared development database — everyone runs their own.
+
+### 1. Create a Supabase project
+
+At [supabase.com/dashboard](https://supabase.com/dashboard) → **New project**.
+Note the database password; you'll need it in step 3.
+
+### 2. Create the schema
+
+Every table, trigger, RLS policy and the storage bucket is defined in
+`supabase/migrations/`. Apply them **in filename order** — later ones amend
+earlier ones, so order matters.
+
+With the [Supabase CLI](https://supabase.com/docs/guides/local-development):
+
+```bash
+supabase link --project-ref <your-project-ref>
+supabase db push
+```
+
+Or without it: open the SQL Editor in the dashboard and paste each file from
+`supabase/migrations/` in order, oldest first.
+
+### 3. Configure the environment
+
+```bash
+cp .env.example .env.local
+```
+
+| Variable | Where to find it | Required |
+|---|---|---|
+| `NEXT_PUBLIC_SUPABASE_URL` | Project Settings → API | yes |
+| `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Project Settings → API (publishable key) | yes |
+| `DATABASE_URL` | Connect → ORMs → Prisma (Transaction pooler, **port 6543**) | yes |
+| `BREVO_API_KEY`, `EMAIL_FROM_ADDRESS` | [Brevo](https://app.brevo.com) — free tier, 300/day | no |
+| `CRON_SECRET` | `openssl rand -hex 32` | for the daily digest |
+
+Two things people get wrong here:
+
+- **Don't append `?schema=taskflow` to `DATABASE_URL`.** The schema is selected
+  by the driver adapter in `src/lib/prisma.ts`.
+- **No service-role key.** Nothing needs one, and adding it would put a key
+  that bypasses row level security into your deployment.
+
+Leave the email variables unset and the app simply sends no mail — everything
+else works, and notifications still appear in-app.
+
+### 4. Run it
+
+```bash
+npm install     # also runs `prisma generate`
+npm run dev
+```
+
+Open [localhost:3000](http://localhost:3000) and sign up. **The first account
+becomes the admin and is active immediately**; everyone after that waits for
+your approval.
+
+### Deploy
+
+[![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https%3A%2F%2Fgithub.com%2Fmalharlakdawala%2Ftaskflow&env=NEXT_PUBLIC_SUPABASE_URL,NEXT_PUBLIC_SUPABASE_ANON_KEY,DATABASE_URL&envDescription=Supabase%20project%20URL%2C%20publishable%20key%2C%20and%20the%20transaction-pooler%20connection%20string)
+
+Then add your deployment URL to Supabase → Authentication → URL Configuration →
+Redirect URLs, or email confirmation links won't resolve. See
+[Deploying to Vercel](#deploying-to-vercel) for the rest.
+
 ## Architecture Notes
 
 Two things are non-obvious and worth knowing before you change anything:
 
-**Tables live in the `taskflow` schema, not `public`.** This Supabase project is
-shared with another application, so TaskFlow is namespaced to keep the two
-apart. The schema is selected at runtime by the driver adapter in
-`src/lib/prisma.ts` — do **not** append `?schema=` to `DATABASE_URL`.
+**Tables live in the `taskflow` schema, not `public`.** Namespacing means you
+can point TaskFlow at a Supabase project you're already using for something
+else without the two colliding. The schema is selected at runtime by the driver
+adapter in `src/lib/prisma.ts` — do **not** append `?schema=` to
+`DATABASE_URL`.
 
 **`taskflow."User"` mirrors `auth.users` and shares its uuid.** An
 `on_auth_user_created` trigger inserts the application row whenever someone
-signs up, so `auth.uid()` can be used directly as a foreign key.
-`getCurrentDbUser()` in `src/lib/auth.ts` re-upserts as a safety net.
+signs up, so `auth.uid()` can be used directly as a foreign key — which is why
+`getAppUser()` in `src/lib/auth.ts` is a plain indexed lookup rather than an
+upsert.
 
 DDL is owned by Supabase migrations rather than `prisma migrate`.
 `prisma/schema.prisma` describes the existing tables so Prisma can query them;
@@ -72,41 +178,6 @@ the bell, because a status nudge does not belong in anyone's inbox. Everything
 runs inside `after()`, and every failure is logged and swallowed: a notification
 must never be able to fail the write that triggered it.
 
-## Getting Started
-
-### 1. Configure environment
-
-```bash
-cp .env.example .env.local
-```
-
-Fill in from the Supabase dashboard:
-
-| Variable | Where to find it |
-|---|---|
-| `NEXT_PUBLIC_SUPABASE_URL` | Project Settings → API |
-| `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Project Settings → API (publishable key) |
-| `DATABASE_URL` | Connect → ORMs → Prisma (Transaction pooler, port 6543) |
-
-No service-role key is needed — every write runs as the signed-in user so row
-level security stays in force.
-
-### 2. Install and run
-
-```bash
-npm install     # also runs `prisma generate`
-npm run dev
-```
-
-Visit [http://localhost:3000](http://localhost:3000), create an account, and
-you're in.
-
-### Database setup
-
-The schema, the auth sync trigger, the RLS policies, and the
-`task-attachments` storage bucket are already provisioned. To recreate them on a
-fresh project, replay the migrations in `supabase/migrations/` in order.
-
 ## Membership and Roles
 
 The first account to sign up becomes an **admin** and is active immediately.
@@ -120,9 +191,9 @@ admin cannot be demoted or removed.
 
 ## Performance Notes
 
-The database lives in `ap-northeast-1` (Tokyo), so each round-trip from
-elsewhere is expensive. Three things keep request counts down — undo them at
-your peril:
+This was built against a database in `ap-northeast-1` (Tokyo), where each
+round-trip from elsewhere is expensive enough to dominate page load. Three
+things keep request counts down — undo them at your peril:
 
 - **`getClaims()`, not `getUser()`** (`src/lib/auth.ts`, `src/lib/supabase/session.ts`).
   Tokens are ES256 with a published JWKS, so the signature is verified locally.
@@ -134,7 +205,9 @@ your peril:
   and attachments; only the detail view loads them.
 
 `vercel.json` pins functions to `hnd1` (Tokyo) so the server sits beside the
-database. If you move the database, move this too.
+database. **Change this to match your own Supabase region** — leaving it will
+put every request on the wrong side of the planet. Vercel's region list is in
+their [regions docs](https://vercel.com/docs/edge-network/regions).
 
 ## Security Model
 
@@ -145,12 +218,18 @@ database. If you move the database, move this too.
 - Attachment URLs are public and unguessable (uuid-prefixed), but the bucket
   cannot be listed — there is no SELECT policy on `storage.objects`, so nobody
   can enumerate uploads. Writes are confined to the uploader's own `<uid>/` prefix.
-- The workspace is **shared** — every signed-in user can see and edit every
-  task. Comments can only be edited or deleted by their author.
-- Because signing up grants full access, keep sign-ups closed or restricted in
-  Supabase → Authentication → Providers once your own account exists.
+- The workspace is **shared** — every *approved* user can see and edit every
+  task. Comments can only be edited or deleted by their author, and
+  notifications and MCP tokens are private to one person.
+- Sign-up is open but grants nothing: new accounts sit in `PENDING` until an
+  admin approves them, and the server layout refuses to render task data to
+  them. You can close sign-ups entirely in Supabase → Authentication →
+  Providers if you'd rather not field the requests.
 - API routes validate every payload with Zod and write only allow-listed
   columns.
+- MCP personal access tokens are stored as SHA-256 hashes and scoped to one
+  member. See [SECURITY.md](SECURITY.md) for the full model and for how to
+  report a vulnerability.
 
 ## MCP — Terminal Integration
 
@@ -301,3 +380,20 @@ src/
 │   └── validation.ts    # Zod request schemas
 └── generated/prisma/    # Generated Prisma client (gitignored)
 ```
+
+## Contributing
+
+Bug fixes, docs and accessibility improvements are welcome without asking.
+For anything larger, please open an issue first — see
+[CONTRIBUTING.md](CONTRIBUTING.md) for setup, house style, and the three
+things worth knowing before you touch the data layer.
+
+There is no test suite yet. That's a gap rather than a decision, and it is
+probably the most useful thing anyone could contribute.
+
+## Licence
+
+[MIT](LICENSE) © Malhar Lakdawala
+
+Use it, fork it, run it for your team, sell it. If it's useful, a star is
+appreciated.

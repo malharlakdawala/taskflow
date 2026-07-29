@@ -1,0 +1,39 @@
+name: Feature request
+description: Suggest something TaskFlow should do
+labels: ["enhancement"]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: What's the problem?
+      description: >
+        Describe the situation you're in, not the solution you have in mind.
+        "I can't tell which tasks are waiting on me" is more useful than
+        "add a filter dropdown" — it leaves room for a better answer.
+    validations:
+      required: true
+
+  - type: textarea
+    id: solution
+    attributes:
+      label: What would you like to happen?
+    validations:
+      required: true
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: What else did you consider?
+      description: Including working around it, or doing nothing.
+
+  - type: dropdown
+    id: contributing
+    attributes:
+      label: Would you be up for building it?
+      description: No pressure either way — this just helps with planning.
+      options:
+        - I'd like to try, with some direction
+        - I could help test it
+        - No, just suggesting
+    validations:
+      required: true

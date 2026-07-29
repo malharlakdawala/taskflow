@@ -1,0 +1,80 @@
+name: Bug report
+description: Something doesn't work the way it should
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for reporting this. If it's a **security** problem, please close
+        this and follow [SECURITY.md](../blob/main/SECURITY.md) instead — don't
+        describe it in public.
+
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened?
+      description: What did you expect, and what did you get instead?
+    validations:
+      required: true
+
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. Sign in as a member
+        2. Open a task and change its status
+        3. …
+    validations:
+      required: true
+
+  - type: dropdown
+    id: area
+    attributes:
+      label: Where is it?
+      options:
+        - Board / List / Calendar
+        - Task detail, comments or attachments
+        - Notifications
+        - MCP (hosted endpoint or the stdio server)
+        - Sign-up, sign-in or member approval
+        - Email
+        - Setup / deployment
+        - Somewhere else
+    validations:
+      required: true
+
+  - type: input
+    id: version
+    attributes:
+      label: Version
+      description: The commit SHA or release you're on.
+      placeholder: "e.g. 4acea94, or v0.1.0"
+
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment
+      placeholder: |
+        Node: 24.15.0
+        Browser: Chrome 141 / Safari 26
+        Running: locally / Vercel / other
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs or errors
+      description: >
+        Anything from the browser console, the terminal, or your Vercel logs.
+        This is automatically formatted as code — no backticks needed.
+      render: shell
+
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Before submitting
+      options:
+        - label: I searched existing issues and this isn't a duplicate
+          required: true
+        - label: I've redacted any tokens, connection strings and personal data
+          required: true

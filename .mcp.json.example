@@ -1,0 +1,17 @@
+{
+  "_comment": [
+    "Optional development convenience. Wires the Supabase MCP server into your",
+    "editor so an agent can read the schema and apply migrations while you work.",
+    "",
+    "Copy to .mcp.json (gitignored) and replace YOUR_PROJECT_REF with the ref",
+    "from your dashboard URL: supabase.com/dashboard/project/<ref>.",
+    "",
+    "Nothing in the app requires this."
+  ],
+  "mcpServers": {
+    "supabase": {
+      "type": "http",
+      "url": "https://mcp.supabase.com/mcp?project_ref=YOUR_PROJECT_REF&features=docs%2Cdatabase%2Cdebugging%2Cdevelopment"
+    }
+  }
+}
