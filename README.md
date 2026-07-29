@@ -27,6 +27,17 @@ notifications as the web app.**
 Deploy it on Vercel's free tier against a free Supabase project and it costs
 nothing to run for a team.
 
+## See it working
+
+![TaskFlow walkthrough: dragging a card between columns, the notification feed, a task with rich text and comments, zooming an image, and a dashboard stat clicked through to a filtered list](docs/screenshots/demo.gif)
+
+<sub>Dragging a card between columns · the notification feed · a task's rich
+text, attachments and comments · zooming an image · a dashboard stat clicked
+through to the filtered list it counted.</sub>
+
+There is no hosted demo to log into — [run it locally](#run-it-locally-no-accounts-2-minutes)
+instead. It takes about two minutes and needs no accounts.
+
 ## Screenshots
 
 ![The board](docs/screenshots/board.png)

@@ -10,6 +10,7 @@ at one you actually use.
 
 | File | Shows |
 |---|---|
+| `demo.gif` | ~19s walkthrough: drag between columns → notifications → task detail → image zoom → dashboard → filtered list |
 | `board.png` | The Kanban board, all five columns |
 | `dashboard.png` | Stat tiles, status/priority breakdowns, upcoming tasks |
 | `list.png` | List view grouped by status, with inline fields |
@@ -31,3 +32,9 @@ await page.addStyleTag({ content: "nextjs-portal{display:none!important}" });
 
 Widths: 2100px for the board (it needs room for five columns), 1800px for the
 list, 1600px for everything else.
+
+`demo.gif` was recorded with Playwright's `recordVideo` at 1280×800, extracted
+to frames at 10fps, and joined with sharp at 880px wide and 64 colours — which
+lands at about 3 MB. Much beyond that and GitHub's README becomes unpleasant on
+a phone, so trade resolution before you trade frame rate; choppy reads worse
+than slightly soft.
