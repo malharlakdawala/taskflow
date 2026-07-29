@@ -2,6 +2,14 @@
 
 Thanks for taking the time. This is a small project, so the process is light.
 
+## Where to start
+
+The [open issues](https://github.com/malharlakdawala/taskflow/issues) are
+written with pointers into the code and acceptance criteria, not one-line
+wishes — pick one and say so on the issue so two people don't build it twice.
+[`good first issue`](https://github.com/malharlakdawala/taskflow/issues?q=is%3Aissue+is%3Aopen+label%3A%22good+first+issue%22)
+is the shortlist.
+
 ## Before you build something big
 
 Open an issue first for anything beyond a bug fix. It costs you five minutes

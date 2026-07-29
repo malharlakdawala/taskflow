@@ -20,10 +20,10 @@ at one you actually use.
 
 ## Regenerating them
 
-There is no seed script in the repo yet — [adding one is an open
-issue](https://github.com/malharlakdawala/taskflow/issues), and it would make
-this a lot easier. Until then, the shots were taken at a 2× device scale factor
-against a locally seeded database, with the Next dev overlay hidden:
+There is no seed script in the repo yet — [#1](https://github.com/malharlakdawala/taskflow/issues/1)
+would make this much easier, and is up for grabs. Until then, the shots were
+taken at a 2× device scale factor against a locally seeded database, with the
+Next dev overlay hidden:
 
 ```js
 await page.addStyleTag({ content: "nextjs-portal{display:none!important}" });

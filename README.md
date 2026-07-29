@@ -393,11 +393,20 @@ src/
 
 Bug fixes, docs and accessibility improvements are welcome without asking.
 For anything larger, please open an issue first — see
-[CONTRIBUTING.md](CONTRIBUTING.md) for setup, house style, and the three
-things worth knowing before you touch the data layer.
+[CONTRIBUTING.md](CONTRIBUTING.md) for setup, house style, and the things
+worth knowing before you touch the data layer.
 
-There is no test suite yet. That's a gap rather than a decision, and it is
-probably the most useful thing anyone could contribute.
+**Looking for somewhere to start?** The
+[open issues](https://github.com/malharlakdawala/taskflow/issues) are written
+with pointers into the code rather than one-line wishes.
+[`good first issue`](https://github.com/malharlakdawala/taskflow/issues?q=is%3Aissue+is%3Aopen+label%3A%22good+first+issue%22)
+is the shortlist. A few that would help most:
+
+- [#1 A seed script](https://github.com/malharlakdawala/taskflow/issues/1) — makes the app evaluable in one command
+- [#2 A test runner](https://github.com/malharlakdawala/taskflow/issues/2) — there is no test suite yet, and that's a gap rather than a decision
+- [#3 Finish tags](https://github.com/malharlakdawala/taskflow/issues/3) — the tables exist, the UI doesn't
+- [#5 Make it work on a phone](https://github.com/malharlakdawala/taskflow/issues/5) — the sidebar has no breakpoints at all
+- [#10 Local dev with the Supabase CLI](https://github.com/malharlakdawala/taskflow/issues/10) — no hosted project needed to try it
 
 ## Licence
 
