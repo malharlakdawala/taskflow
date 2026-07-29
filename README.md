@@ -25,6 +25,9 @@ integration over the Model Context Protocol.
 - **Assignees** — Pick an assignee on create or from the task detail view
 - **Rich Text Editor** — Tiptap with headings, lists, code blocks, links, tables,
   and image upload by file picker, paste, or drag-and-drop
+- **Image Viewer** — Any image in a description, comment or attachment list
+  opens full-screen: click, scroll or the toolbar to zoom, drag to pan, arrow
+  keys to step through the rest
 - **Comments** — Per-task discussion
 - **Notifications** — A bell in the sidebar with an unread badge, a full feed at
   `/notifications`, and a deep link on every entry that opens the exact task or

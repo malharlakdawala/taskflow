@@ -9,6 +9,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
 import { Skeleton } from "@/components/ui/skeleton";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
+import { Lightbox } from "@/components/ui/lightbox";
 import {
   ArrowLeft,
   Trash2,
@@ -72,6 +73,8 @@ export default function TaskDetailPage() {
   const [pendingRemoval, setPendingRemoval] = useState<Attachment | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [isDropTarget, setIsDropTarget] = useState(false);
+  /** Index into the image attachments, or null when the viewer is closed. */
+  const [viewing, setViewing] = useState<number | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -247,6 +250,12 @@ export default function TaskDetailPage() {
 
   const due = task.dueDate ? new Date(task.dueDate) : null;
   const isOverdue = due !== null && due < new Date() && task.status !== "DONE";
+
+  // Images open in the viewer so they can be zoomed, and step through each
+  // other while it is open. Anything else is a file, and still opens as one.
+  const imageAttachments = task.attachments.filter((attachment) =>
+    attachment.mimeType.startsWith("image/")
+  );
 
   return (
     <div className="enter flex h-full flex-col">
@@ -452,37 +461,59 @@ export default function TaskDetailPage() {
                 ) : (
                   <ul className="grid grid-cols-2 gap-2 sm:grid-cols-3">
                     {task.attachments.map((attachment) => {
-                      const isImage = attachment.mimeType.startsWith("image/");
+                      const imageIndex = imageAttachments.indexOf(attachment);
+                      const isImage = imageIndex !== -1;
+
+                      const tile = (
+                        <>
+                          {/* Images preview; everything else gets an icon tile. */}
+                          <div className="flex h-24 items-center justify-center overflow-hidden bg-muted/60">
+                            {isImage ? (
+                              // eslint-disable-next-line @next/next/no-img-element
+                              <img
+                                src={attachment.url}
+                                alt={attachment.filename}
+                                className="h-full w-full object-cover"
+                              />
+                            ) : (
+                              <FileText className="h-7 w-7 text-muted-foreground" />
+                            )}
+                          </div>
+                          <div className="px-2 py-1.5 text-left">
+                            <p className="truncate text-xs font-medium">
+                              {attachment.filename}
+                            </p>
+                            <p className="text-[11px] text-muted-foreground">
+                              {(attachment.fileSize / 1024).toFixed(0)} KB
+                            </p>
+                          </div>
+                        </>
+                      );
+
+                      const tileClass =
+                        "lift block w-full overflow-hidden rounded-lg border bg-card focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50";
+
                       return (
                         <li key={attachment.id} className="group relative">
-                          <a
-                            href={attachment.url}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="lift block overflow-hidden rounded-lg border bg-card focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
-                          >
-                            {/* Images preview; everything else gets an icon tile. */}
-                            <div className="flex h-24 items-center justify-center overflow-hidden bg-muted/60">
-                              {isImage ? (
-                                // eslint-disable-next-line @next/next/no-img-element
-                                <img
-                                  src={attachment.url}
-                                  alt={attachment.filename}
-                                  className="h-full w-full object-cover"
-                                />
-                              ) : (
-                                <FileText className="h-7 w-7 text-muted-foreground" />
-                              )}
-                            </div>
-                            <div className="px-2 py-1.5">
-                              <p className="truncate text-xs font-medium">
-                                {attachment.filename}
-                              </p>
-                              <p className="text-[11px] text-muted-foreground">
-                                {(attachment.fileSize / 1024).toFixed(0)} KB
-                              </p>
-                            </div>
-                          </a>
+                          {isImage ? (
+                            <button
+                              type="button"
+                              onClick={() => setViewing(imageIndex)}
+                              aria-label={`View ${attachment.filename}`}
+                              className={cn(tileClass, "cursor-zoom-in")}
+                            >
+                              {tile}
+                            </button>
+                          ) : (
+                            <a
+                              href={attachment.url}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className={tileClass}
+                            >
+                              {tile}
+                            </a>
+                          )}
                           <button
                             type="button"
                             aria-label={`Remove ${attachment.filename}`}
@@ -636,6 +667,16 @@ export default function TaskDetailPage() {
           </div>
         </div>
       </div>
+
+      <Lightbox
+        images={imageAttachments.map((attachment) => ({
+          src: attachment.url,
+          alt: attachment.filename,
+        }))}
+        index={viewing}
+        onIndexChange={setViewing}
+        onClose={() => setViewing(null)}
+      />
 
       <ConfirmDialog
         open={isConfirmingDelete}
