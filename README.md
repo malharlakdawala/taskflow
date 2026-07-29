@@ -29,15 +29,23 @@ nothing to run for a team.
 
 ## Screenshots
 
-> **Contributors:** these are not committed yet. If you'd like to help, add
-> screenshots with dummy data to `docs/screenshots/` and open a PR — real
-> workspace content should never be published here.
+![The board](docs/screenshots/board.png)
 
-<!--
-| Board | Task detail |
+| Dashboard | Task detail |
 |---|---|
-| ![Board](docs/screenshots/board.png) | ![Task detail](docs/screenshots/task-detail.png) |
--->
+| [![Dashboard](docs/screenshots/dashboard.png)](docs/screenshots/dashboard.png) | [![Task detail](docs/screenshots/task-detail.png)](docs/screenshots/task-detail.png) |
+| Every count links into the list, filtered to exactly the tasks it counted. | Rich text, attachments, comments and inline editing. |
+
+| Notifications | Settings → MCP |
+|---|---|
+| [![Notifications](docs/screenshots/notifications.png)](docs/screenshots/notifications.png) | [![MCP settings](docs/screenshots/mcp-settings.png)](docs/screenshots/mcp-settings.png) |
+| Assignments, comments, field edits and due-date warnings, each deep-linking to what changed. | Members generate their own token and copy a ready-made connect command. |
+
+Also: a [list view](docs/screenshots/list.png) grouped by status with inline
+editing and bulk actions, and a [full-screen image viewer](docs/screenshots/image-viewer.png)
+for any picture in a description, comment or attachment.
+
+<sub>All screenshots use invented data from a fictional plant-care team.</sub>
 
 ## Tech Stack
 

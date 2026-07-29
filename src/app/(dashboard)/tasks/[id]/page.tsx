@@ -5,7 +5,13 @@ import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  Card,
+  CardAction,
+  CardContent,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
 import { Skeleton } from "@/components/ui/skeleton";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
@@ -409,26 +415,30 @@ export default function TaskDetailPage() {
                 isDropTarget && "border-primary/50 bg-primary/5"
               )}
             >
-              <CardHeader className="flex-row items-center justify-between space-y-0">
+              {/* CardHeader is a grid — `flex-row` never applied, so the Add
+                  button stretched across the card. CardAction is its slot. */}
+              <CardHeader>
                 <CardTitle className="flex items-center gap-2 text-base">
                   <Paperclip className="h-4 w-4 text-muted-foreground" />
                   Attachments
                   <Count value={task.attachments.length} />
                 </CardTitle>
                 {task.attachments.length > 0 && (
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    disabled={isUploading}
-                    onClick={() => fileInputRef.current?.click()}
-                  >
-                    {isUploading ? (
-                      <Loader2 className="mr-1 h-4 w-4 animate-spin" />
-                    ) : (
-                      <Upload className="mr-1 h-4 w-4" />
-                    )}
-                    Add
-                  </Button>
+                  <CardAction>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      disabled={isUploading}
+                      onClick={() => fileInputRef.current?.click()}
+                    >
+                      {isUploading ? (
+                        <Loader2 className="mr-1 h-4 w-4 animate-spin" />
+                      ) : (
+                        <Upload className="mr-1 h-4 w-4" />
+                      )}
+                      Add
+                    </Button>
+                  </CardAction>
                 )}
               </CardHeader>
               <CardContent>

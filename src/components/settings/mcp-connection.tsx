@@ -14,7 +14,14 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  Card,
+  CardAction,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import {
@@ -183,21 +190,23 @@ export function McpConnection({ userEmail }: { userEmail: string }) {
   return (
     <div className="space-y-6">
       <Card>
-        <CardHeader className="flex-row items-start justify-between gap-4 space-y-0">
-          <div>
-            <CardTitle className="flex items-center gap-2 text-base">
-              <KeyRound className="h-4 w-4 text-muted-foreground" />
-              Your tokens
-            </CardTitle>
-            <p className="mt-1 text-sm text-muted-foreground">
-              A token lets a terminal act as you — {userEmail}. Anything it does
-              shows up as yours.
-            </p>
-          </div>
-          <Button size="sm" className="gap-1.5" onClick={() => setIsNaming(true)}>
-            <Plus className="h-4 w-4" />
-            New token
-          </Button>
+        {/* CardHeader is a grid; CardAction is the slot that keeps the button
+            beside the title instead of stretched underneath it. */}
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2 text-base">
+            <KeyRound className="h-4 w-4 text-muted-foreground" />
+            Your tokens
+          </CardTitle>
+          <CardDescription>
+            A token lets a terminal act as you — {userEmail}. Anything it does
+            shows up as yours.
+          </CardDescription>
+          <CardAction>
+            <Button size="sm" className="gap-1.5" onClick={() => setIsNaming(true)}>
+              <Plus className="h-4 w-4" />
+              New token
+            </Button>
+          </CardAction>
         </CardHeader>
         <CardContent>
           {isLoading ? (

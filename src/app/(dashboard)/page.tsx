@@ -1,7 +1,13 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  Card,
+  CardAction,
+  CardContent,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
@@ -214,15 +220,19 @@ export default function DashboardPage() {
       </div>
 
       <Card>
-        <CardHeader className="flex-row items-center justify-between space-y-0 pb-3">
+        {/* CardHeader is a grid, so `flex-row` never applied and the link sat
+            under the title at full width. CardAction is the slot it wants. */}
+        <CardHeader className="pb-3">
           <CardTitle className="text-base">Coming up</CardTitle>
-          <Link
-            href="/calendar"
-            className="inline-flex items-center gap-1 text-sm text-muted-foreground transition-colors hover:text-primary"
-          >
-            Calendar
-            <ArrowRight className="h-3.5 w-3.5" />
-          </Link>
+          <CardAction>
+            <Link
+              href="/calendar"
+              className="inline-flex items-center gap-1 text-sm text-muted-foreground transition-colors hover:text-primary"
+            >
+              Calendar
+              <ArrowRight className="h-3.5 w-3.5" />
+            </Link>
+          </CardAction>
         </CardHeader>
         <CardContent>
           {stats.upcoming.length === 0 ? (

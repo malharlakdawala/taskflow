@@ -58,3 +58,6 @@ next-env.d.ts
 skills-lock.json
 .idea/
 .vscode/
+
+# Supabase CLI scratch state
+supabase/.temp/
