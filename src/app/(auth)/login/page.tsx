@@ -7,6 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import Link from "next/link";
+import { DEMO_CREDENTIALS, isDemoMode } from "@/lib/demo";
 
 export default function LoginPage() {
   const [email, setEmail] = useState("");
@@ -50,6 +51,37 @@ export default function LoginPage() {
           <CardDescription>Sign in to your task manager</CardDescription>
         </CardHeader>
         <CardContent>
+          {/* Only on a demo deployment. A visitor who has to sign up and then
+              wait for approval will simply leave. */}
+          {isDemoMode && (
+            <div className="mb-4 rounded-lg border border-primary/20 bg-primary/[0.06] p-3 text-sm">
+              <p className="font-semibold">This is a public demo</p>
+              <p className="mt-1 text-muted-foreground">
+                Sign in and change whatever you like — the data resets
+                regularly, and nothing here is real.
+              </p>
+              <div className="mt-2 flex items-center justify-between gap-3 rounded-md bg-background/70 px-2.5 py-1.5 font-mono text-xs">
+                <span>
+                  {DEMO_CREDENTIALS.email}
+                  <span className="text-muted-foreground"> / </span>
+                  {DEMO_CREDENTIALS.password}
+                </span>
+                <Button
+                  type="button"
+                  size="xs"
+                  variant="outline"
+                  className="font-sans"
+                  onClick={() => {
+                    setEmail(DEMO_CREDENTIALS.email);
+                    setPassword(DEMO_CREDENTIALS.password);
+                  }}
+                >
+                  Fill in
+                </Button>
+              </div>
+            </div>
+          )}
+
           <form onSubmit={handleSubmit} className="space-y-4">
             {error && (
               <div className="p-3 text-sm text-red-500 bg-red-50 dark:bg-red-950/30 rounded-md">

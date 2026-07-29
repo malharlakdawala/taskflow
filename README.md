@@ -89,15 +89,54 @@ for any picture in a description, comment or attachment.
 
 ## Quick start
 
-You need **Node.js 24** and a **Supabase project** (the free tier is plenty).
-There is no shared development database — everyone runs their own.
+Two ways in. **Take the first one** unless you already know you want a hosted
+database — it needs no accounts and no signup.
 
-### 1. Create a Supabase project
+### Run it locally (no accounts, ~2 minutes)
+
+Requires **Node.js 24**, **Docker** running, and the
+[Supabase CLI](https://supabase.com/docs/guides/local-development).
+
+```bash
+git clone https://github.com/malharlakdawala/taskflow.git && cd taskflow
+npm install
+supabase start          # local Postgres + Auth + Storage, applies migrations
+cp .env.example .env.local
+```
+
+`supabase start` prints an API URL, a publishable/anon key and a service_role
+key. Put the first two in `.env.local`, set
+
+```
+DATABASE_URL=postgresql://postgres:postgres@127.0.0.1:54322/postgres
+```
+
+then load it with a workspace to look at and start the app:
+
+```bash
+SUPABASE_SERVICE_ROLE_KEY=<the service_role key> npm run seed
+npm run dev
+```
+
+Sign in as **ada@example.com / taskflow-demo** — an admin in a fictional
+workspace of 20 tasks, comments and notifications. `npm run seed -- --reset`
+puts it back whenever you've made a mess.
+
+> `npm run seed` is the only thing that ever wants the service-role key, and it
+> only wants it to create the demo accounts. Never put that key in `.env.local`
+> permanently or in a deployment — it bypasses row level security.
+
+### Or point it at a hosted Supabase project
+
+For anything you intend to keep. Needs a **Supabase project** — the free tier
+is plenty.
+
+#### 1. Create a Supabase project
 
 At [supabase.com/dashboard](https://supabase.com/dashboard) → **New project**.
 Note the database password; you'll need it in step 3.
 
-### 2. Create the schema
+#### 2. Create the schema
 
 Every table, trigger, RLS policy and the storage bucket is defined in
 `supabase/migrations/`. Apply them **in filename order** — later ones amend
@@ -113,7 +152,7 @@ supabase db push
 Or without it: open the SQL Editor in the dashboard and paste each file from
 `supabase/migrations/` in order, oldest first.
 
-### 3. Configure the environment
+#### 3. Configure the environment
 
 ```bash
 cp .env.example .env.local
@@ -137,7 +176,7 @@ Two things people get wrong here:
 Leave the email variables unset and the app simply sends no mail — everything
 else works, and notifications still appear in-app.
 
-### 4. Run it
+#### 4. Run it
 
 ```bash
 npm install     # also runs `prisma generate`
@@ -148,6 +187,9 @@ Open [localhost:3000](http://localhost:3000) and sign up. **The first account
 becomes the admin and is active immediately**; everyone after that waits for
 your approval.
 
+To start with the demo workspace instead of an empty one, run `npm run seed`
+(see above for the service-role key caveat).
+
 ### Deploy
 
 [![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https%3A%2F%2Fgithub.com%2Fmalharlakdawala%2Ftaskflow&env=NEXT_PUBLIC_SUPABASE_URL,NEXT_PUBLIC_SUPABASE_ANON_KEY,DATABASE_URL&envDescription=Supabase%20project%20URL%2C%20publishable%20key%2C%20and%20the%20transaction-pooler%20connection%20string)
@@ -155,6 +197,36 @@ your approval.
 Then add your deployment URL to Supabase → Authentication → URL Configuration →
 Redirect URLs, or email confirmation links won't resolve. See
 [Deploying to Vercel](#deploying-to-vercel) for the rest.
+
+## Updating
+
+**Forking takes a snapshot.** Nothing is pushed to your copy afterwards — if
+you want later changes you have to pull them deliberately. Watch this repo
+(**Watch → Custom → Releases**) to hear when there is something worth pulling;
+stars notify nobody of anything.
+
+To update a fork:
+
+```bash
+git remote add upstream https://github.com/malharlakdawala/taskflow.git   # once
+git fetch upstream
+git merge upstream/main          # or: rebase, or GitHub's "Sync fork" button
+npm install                      # dependencies may have moved
+```
+
+Then — and this is the step people miss — **apply any new migrations**:
+
+```bash
+supabase db push                 # or paste the new files from supabase/migrations/
+```
+
+New code against an old schema doesn't fail gracefully; it throws Prisma errors
+that look like the app is broken. [CHANGELOG.md](CHANGELOG.md) lists the
+migrations each release needs, so check it before deploying.
+
+If you deployed to Vercel from your fork, pushing to your `main` redeploys
+automatically. The database is never touched by a deploy — that part is always
+yours to run.
 
 ## Architecture Notes
 
