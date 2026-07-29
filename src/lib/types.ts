@@ -47,6 +47,34 @@ export interface Task {
   updatedAt: string;
 }
 
+export type NotificationType =
+  | "TASK_ASSIGNED"
+  | "TASK_UPDATED"
+  | "TASK_COMMENT"
+  | "TASK_DUE_SOON"
+  | "ACCOUNT_APPROVED";
+
+/**
+ * Named `AppNotification` rather than `Notification` on purpose — the latter is
+ * a DOM global, and shadowing it in a client component is a debugging trap.
+ *
+ * `title`, `body` and `url` are rendered server-side when the event happens, so
+ * the client never has to know how any given event should read.
+ */
+export interface AppNotification {
+  id: string;
+  type: NotificationType;
+  title: string;
+  body: string | null;
+  url: string;
+  taskId: string | null;
+  commentId: string | null;
+  readAt: string | null;
+  createdAt: string;
+  /** Null for system events such as the due-date digest. */
+  actor: User | null;
+}
+
 export interface Comment {
   id: string;
   content: string;

@@ -3,7 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { requireMember } from "@/lib/auth";
 import { sanitizeOrNull } from "@/lib/sanitize";
 import { createTaskSchema, formatZodError } from "@/lib/validation";
-import { notifyTaskAssigned } from "@/lib/email/notify";
+import { notifyTaskAssigned } from "@/lib/notifications/dispatch";
 import {
   TASK_LIST_SELECT,
   TASK_DETAIL_INCLUDE,

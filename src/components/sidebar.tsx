@@ -15,6 +15,7 @@ import {
   Zap,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { NotificationBell } from "@/components/notifications/notification-bell";
 import { signOut } from "@/app/(auth)/actions";
 import { useTheme } from "next-themes";
 import type { SessionUser } from "@/lib/types";
@@ -37,28 +38,34 @@ export function Sidebar({ user }: { user: SessionUser }) {
 
   return (
     <div className="flex h-full w-64 shrink-0 flex-col border-r bg-sidebar">
-      {/* The wordmark is the conventional way back to the dashboard. */}
-      <Link
-        href="/"
-        aria-label="TaskFlow home"
-        className={cn(
-          "group flex h-16 items-center gap-2.5 border-b px-5",
-          "transition-colors hover:bg-sidebar-accent/40",
-          "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50 focus-visible:ring-inset"
-        )}
-      >
-        <span
+      {/* The wordmark is the conventional way back to the dashboard; the bell
+          shares its row so notifications are reachable from every screen
+          without costing the nav a slot. */}
+      <div className="flex h-16 shrink-0 items-center border-b pr-2.5">
+        <Link
+          href="/"
+          aria-label="TaskFlow home"
           className={cn(
-            "flex h-8 w-8 items-center justify-center rounded-lg bg-primary text-primary-foreground shadow-sm",
-            "transition-transform duration-200 group-hover:scale-105 group-active:scale-95"
+            "group flex h-full min-w-0 flex-1 items-center gap-2.5 px-5",
+            "transition-colors hover:bg-sidebar-accent/40",
+            "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50 focus-visible:ring-inset"
           )}
         >
-          <Zap className="h-4.5 w-4.5" fill="currentColor" strokeWidth={0} />
-        </span>
-        <span className="font-display text-lg font-bold tracking-tight">
-          TaskFlow
-        </span>
-      </Link>
+          <span
+            className={cn(
+              "flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-primary text-primary-foreground shadow-sm",
+              "transition-transform duration-200 group-hover:scale-105 group-active:scale-95"
+            )}
+          >
+            <Zap className="h-4.5 w-4.5" fill="currentColor" strokeWidth={0} />
+          </span>
+          <span className="font-display truncate text-lg font-bold tracking-tight">
+            TaskFlow
+          </span>
+        </Link>
+
+        <NotificationBell />
+      </div>
 
       <nav className="flex-1 space-y-0.5 p-3">
         <p className="px-3 pb-2 pt-1 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">

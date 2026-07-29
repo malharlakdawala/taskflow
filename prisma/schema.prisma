@@ -8,8 +8,8 @@
 // file run `npx prisma generate` and apply a matching SQL migration in Supabase.
 
 generator client {
-  provider = "prisma-client"
-  output   = "../src/generated/prisma"
+  provider        = "prisma-client"
+  output          = "../src/generated/prisma"
   // Lets queries opt into a single JOIN instead of one round-trip per relation.
   // Round-trips to the Tokyo database cost ~140ms each, so this matters.
   previewFeatures = ["relationJoins"]
@@ -55,46 +55,62 @@ enum UserStatus {
   @@map("user_status")
 }
 
+/// What an in-app notification is about. Field-level task edits (status,
+/// priority, due date, title) collapse into one TASK_UPDATED row per save, so
+/// changing three fields at once doesn't ring the bell three times.
+enum NotificationType {
+  TASK_ASSIGNED
+  TASK_UPDATED
+  TASK_COMMENT
+  TASK_DUE_SOON
+  ACCOUNT_APPROVED
+
+  @@map("notification_type")
+}
+
 /// Mirror of auth.users, kept in sync by the on_auth_user_created trigger.
 /// `id` is deliberately the same uuid as the Supabase auth user id, so a session
 /// user id can be used directly as a foreign key.
 model User {
-  id           String     @id @db.Uuid
-  email        String     @unique
-  name         String?
-  avatarUrl    String?
-  role         UserRole   @default(MEMBER)
-  status       UserStatus @default(PENDING)
-  approvedAt   DateTime?  @db.Timestamptz(6)
-  approvedById String?    @db.Uuid
-  approvedBy   User?      @relation("UserApprovedBy", fields: [approvedById], references: [id], onDelete: SetNull)
-  approved     User[]     @relation("UserApprovedBy")
-  tasks        Task[]     @relation("TaskAssignee")
-  createdTasks Task[]     @relation("TaskCreatedBy")
-  comments     Comment[]
-  createdAt    DateTime   @default(now()) @db.Timestamptz(6)
-  updatedAt    DateTime   @updatedAt @db.Timestamptz(6)
+  id            String         @id @db.Uuid
+  email         String         @unique
+  name          String?
+  avatarUrl     String?
+  role          UserRole       @default(MEMBER)
+  status        UserStatus     @default(PENDING)
+  approvedAt    DateTime?      @db.Timestamptz(6)
+  approvedById  String?        @db.Uuid
+  approvedBy    User?          @relation("UserApprovedBy", fields: [approvedById], references: [id], onDelete: SetNull)
+  approved      User[]         @relation("UserApprovedBy")
+  tasks         Task[]         @relation("TaskAssignee")
+  createdTasks  Task[]         @relation("TaskCreatedBy")
+  comments      Comment[]
+  notifications Notification[] @relation("NotificationRecipient")
+  actedOn       Notification[] @relation("NotificationActor")
+  createdAt     DateTime       @default(now()) @db.Timestamptz(6)
+  updatedAt     DateTime       @updatedAt @db.Timestamptz(6)
 
   @@index([status], map: "User_status_idx")
 }
 
 model Task {
-  id          String       @id @default(uuid()) @db.Uuid
-  title       String
-  description Json?
-  status      TaskStatus   @default(TODO)
-  priority    TaskPriority @default(NONE)
-  dueDate     DateTime?    @db.Timestamptz(6)
-  order       Float        @default(0)
-  assigneeId  String?      @db.Uuid
-  assignee    User?        @relation("TaskAssignee", fields: [assigneeId], references: [id], onDelete: SetNull)
-  createdById String?      @db.Uuid
-  createdBy   User?        @relation("TaskCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
-  comments    Comment[]
-  attachments Attachment[]
-  tags        TaskTag[]
-  createdAt   DateTime     @default(now()) @db.Timestamptz(6)
-  updatedAt   DateTime     @updatedAt @db.Timestamptz(6)
+  id            String         @id @default(uuid()) @db.Uuid
+  title         String
+  description   Json?
+  status        TaskStatus     @default(TODO)
+  priority      TaskPriority   @default(NONE)
+  dueDate       DateTime?      @db.Timestamptz(6)
+  order         Float          @default(0)
+  assigneeId    String?        @db.Uuid
+  assignee      User?          @relation("TaskAssignee", fields: [assigneeId], references: [id], onDelete: SetNull)
+  createdById   String?        @db.Uuid
+  createdBy     User?          @relation("TaskCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  comments      Comment[]
+  attachments   Attachment[]
+  tags          TaskTag[]
+  notifications Notification[]
+  createdAt     DateTime       @default(now()) @db.Timestamptz(6)
+  updatedAt     DateTime       @updatedAt @db.Timestamptz(6)
 
   @@index([status], map: "Task_status_idx")
   @@index([assigneeId], map: "Task_assigneeId_idx")
@@ -103,16 +119,48 @@ model Task {
 }
 
 model Comment {
-  id        String   @id @default(uuid()) @db.Uuid
-  content   Json
-  taskId    String   @db.Uuid
-  task      Task     @relation(fields: [taskId], references: [id], onDelete: Cascade)
-  authorId  String   @db.Uuid
-  author    User     @relation(fields: [authorId], references: [id], onDelete: Cascade)
-  createdAt DateTime @default(now()) @db.Timestamptz(6)
-  updatedAt DateTime @updatedAt @db.Timestamptz(6)
+  id            String         @id @default(uuid()) @db.Uuid
+  content       Json
+  taskId        String         @db.Uuid
+  task          Task           @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  authorId      String         @db.Uuid
+  author        User           @relation(fields: [authorId], references: [id], onDelete: Cascade)
+  notifications Notification[]
+  createdAt     DateTime       @default(now()) @db.Timestamptz(6)
+  updatedAt     DateTime       @updatedAt @db.Timestamptz(6)
 
   @@index([taskId], map: "Comment_taskId_idx")
+}
+
+/// One row per recipient per event — the feed is fanned out on write so
+/// reading it is a single indexed scan with no joins.
+///
+/// `title`, `body` and `url` are rendered when the event happens rather than
+/// derived at read time. That keeps the feed query cheap, and means a
+/// notification still says what it said when it arrived even after the task
+/// has been renamed or moved.
+model Notification {
+  id        String           @id @default(uuid()) @db.Uuid
+  /// Who sees it.
+  userId    String           @db.Uuid
+  user      User             @relation("NotificationRecipient", fields: [userId], references: [id], onDelete: Cascade)
+  /// Who caused it. Null for system events such as the due-date digest.
+  actorId   String?          @db.Uuid
+  actor     User?            @relation("NotificationActor", fields: [actorId], references: [id], onDelete: SetNull)
+  type      NotificationType
+  title     String
+  body      String?
+  /// Where clicking it goes, so a new type never needs a client-side URL rule.
+  url       String
+  taskId    String?          @db.Uuid
+  task      Task?            @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  commentId String?          @db.Uuid
+  comment   Comment?         @relation(fields: [commentId], references: [id], onDelete: Cascade)
+  readAt    DateTime?        @db.Timestamptz(6)
+  createdAt DateTime         @default(now()) @db.Timestamptz(6)
+
+  @@index([userId, createdAt(sort: Desc)], map: "Notification_userId_createdAt_idx")
+  @@index([taskId], map: "Notification_taskId_idx")
 }
 
 model Attachment {

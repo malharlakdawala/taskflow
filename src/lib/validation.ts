@@ -104,6 +104,20 @@ export const createCommentSchema = z.object({
   content: z.string().trim().min(1, "Comment cannot be empty").max(100_000),
 });
 
+/**
+ * Marking notifications read, or clearing them. `all` is the "mark everything"
+ * button; `ids` is what the feed sends when you open one. Requiring one or the
+ * other stops an empty body from silently wiping the whole feed.
+ */
+export const notificationMutationSchema = z
+  .object({
+    ids: z.array(z.uuid()).min(1).max(200).optional(),
+    all: z.literal(true).optional(),
+  })
+  .refine((data) => data.all === true || (data.ids?.length ?? 0) > 0, {
+    message: "Provide ids or all",
+  });
+
 export const createAttachmentSchema = z.object({
   filename: z.string().min(1).max(500),
   url: z.url(),

@@ -3,7 +3,13 @@ import { Prisma } from "@/generated/prisma/client";
 import { prisma } from "@/lib/prisma";
 import { requireMember } from "@/lib/auth";
 import { bulkUpdateSchema, bulkDeleteSchema, formatZodError } from "@/lib/validation";
-import { notifyTasksAssigned } from "@/lib/email/notify";
+import {
+  describeTaskValues,
+  notifyTasksAssigned,
+  notifyTasksUpdated,
+  summarizeTaskChanges,
+  type TaskSnapshot,
+} from "@/lib/notifications/dispatch";
 
 /**
  * Applies one change to many tasks in a single request. The list view's bulk
@@ -27,26 +33,50 @@ export async function PATCH(request: Request) {
   if (assigneeId !== undefined) data.assigneeId = assigneeId;
   if (dueDate !== undefined) data.dueDate = dueDate ? new Date(dueDate) : null;
 
-  // Which rows are genuinely changing hands has to be read before the write.
-  // Comparing in JS rather than with a `not` filter because SQL's NULL <> x is
-  // NULL, so an unassigned task would be missed by the query.
+  // What the rows looked like before, read once and reused for both the
+  // "who is this newly on?" question and the change summary. Only the columns
+  // this request writes are read, so the pre-read stays proportional.
+  const beforeSelect: Prisma.TaskSelect = { id: true };
+  if (assigneeId !== undefined) beforeSelect.assigneeId = true;
+  if (status !== undefined) beforeSelect.status = true;
+  if (priority !== undefined) beforeSelect.priority = true;
+  if (dueDate !== undefined) beforeSelect.dueDate = true;
+
+  const before = (await prisma.task.findMany({
+    where: { id: { in: ids } },
+    select: beforeSelect,
+  })) as Array<TaskSnapshot & { id: string; assigneeId?: string | null }>;
+
+  // Which rows are genuinely changing hands. Comparing in JS rather than with
+  // a `not` filter because SQL's NULL <> x is NULL, so an unassigned task
+  // would be missed by the query.
   // Held in its own const so the narrowing survives into the after() closure.
   const nextAssigneeId = assigneeId ?? null;
-  let newlyAssigned: string[] = [];
-  if (nextAssigneeId !== null) {
-    const before = await prisma.task.findMany({
-      where: { id: { in: ids } },
-      select: { id: true, assigneeId: true },
-    });
-    newlyAssigned = before
-      .filter((task) => task.assigneeId !== nextAssigneeId)
-      .map((task) => task.id);
-  }
+  const newlyAssigned =
+    nextAssigneeId === null
+      ? []
+      : before
+          .filter((task) => task.assigneeId !== nextAssigneeId)
+          .map((task) => task.id);
 
   const result = await prisma.task.updateMany({
     where: { id: { in: ids } },
     data,
   });
+
+  // Every selected row ends up with the same values, so one summary describes
+  // the whole operation. The per-row diff is only used to drop tasks that were
+  // already in that state — reselecting fifty Done tasks and setting them Done
+  // should notify nobody.
+  const nextValues: TaskSnapshot = {
+    ...(status !== undefined && { status }),
+    ...(priority !== undefined && { priority }),
+    ...(dueDate !== undefined && { dueDate: dueDate ? new Date(dueDate) : null }),
+  };
+  const changedIds = before
+    .filter((task) => summarizeTaskChanges(task, nextValues).length > 0)
+    .map((task) => task.id);
+  const changes = describeTaskValues(nextValues);
 
   if (newlyAssigned.length > 0) {
     // One digest, not one email per task — a fifty-task reassignment should
@@ -55,6 +85,16 @@ export async function PATCH(request: Request) {
       notifyTasksAssigned({
         taskIds: newlyAssigned,
         assigneeId: nextAssigneeId,
+        actorId: guard.user.id,
+      })
+    );
+  }
+
+  if (changedIds.length > 0) {
+    after(() =>
+      notifyTasksUpdated({
+        taskIds: changedIds,
+        changes,
         actorId: guard.user.id,
       })
     );

@@ -5,7 +5,12 @@ import { requireMember } from "@/lib/auth";
 import { sanitizeOrNull } from "@/lib/sanitize";
 import { updateTaskSchema, formatZodError } from "@/lib/validation";
 import { TASK_DETAIL_INCLUDE, serializeTask } from "@/lib/tasks";
-import { notifyTaskAssigned } from "@/lib/email/notify";
+import {
+  notifyTaskAssigned,
+  notifyTaskUpdated,
+  summarizeTaskChanges,
+  type TaskSnapshot,
+} from "@/lib/notifications/dispatch";
 
 const notFound = () =>
   NextResponse.json({ error: "Task not found" }, { status: 404 });
@@ -60,16 +65,26 @@ export async function PATCH(
   if (assigneeId !== undefined) data.assigneeId = assigneeId;
   if (order !== undefined) data.order = order;
 
-  // Only read the current assignee when the request could change it — an extra
-  // round-trip on every status tweak is not worth paying for.
-  let previousAssigneeId: string | null = null;
-  if (assigneeId !== undefined) {
-    const current = await prisma.task.findUnique({
+  // Notifications need to know what the values were, and only the caller of
+  // this route knows which columns are being written. So the pre-read is built
+  // from the request: an `order`-only PATCH — the one the board fires on every
+  // drag — still reads nothing, while a status change pays a single round-trip
+  // for the column it is about to overwrite.
+  const beforeSelect: Prisma.TaskSelect = {};
+  if (assigneeId !== undefined) beforeSelect.assigneeId = true;
+  if (title !== undefined) beforeSelect.title = true;
+  if (status !== undefined) beforeSelect.status = true;
+  if (priority !== undefined) beforeSelect.priority = true;
+  if (dueDate !== undefined) beforeSelect.dueDate = true;
+
+  let before: TaskSnapshot & { assigneeId?: string | null } = {};
+  if (Object.keys(beforeSelect).length > 0) {
+    before = ((await prisma.task.findUnique({
       where: { id },
-      select: { assigneeId: true },
-    });
-    previousAssigneeId = current?.assigneeId ?? null;
+      select: beforeSelect,
+    })) ?? {}) as typeof before;
   }
+  const previousAssigneeId = before.assigneeId ?? null;
 
   // update() throws P2025 when the row is gone, which saves a pre-read.
   try {
@@ -88,6 +103,20 @@ export async function PATCH(
           taskId: task.id,
           assigneeId: task.assigneeId,
           previousAssigneeId,
+          actorId: guard.user.id,
+        })
+      );
+    }
+
+    // Field edits are a separate event from reassignment: a PATCH that both
+    // moves a task to In Review and hands it over should tell the new owner
+    // they own it, and tell everyone else what changed.
+    const changes = summarizeTaskChanges(before, task);
+    if (changes.length > 0) {
+      after(() =>
+        notifyTaskUpdated({
+          taskId: task.id,
+          changes,
           actorId: guard.user.id,
         })
       );

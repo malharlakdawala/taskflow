@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { TiptapEditor } from "@/components/editor/tiptap-editor";
 import { RichText } from "@/components/rich-text";
@@ -27,6 +27,45 @@ export function CommentList({ comments, taskId, onCommentAdded }: CommentListPro
   const [isComposing, setIsComposing] = useState(false);
   // Remounts the editor after a successful post so it visibly clears.
   const [editorKey, setEditorKey] = useState(0);
+
+  /**
+   * A comment notification links to `/tasks/<id>#comment-<id>`, but the thread
+   * is fetched client-side — by the time it exists the browser has long since
+   * given up on the hash. So the scroll is done here, once the target is
+   * actually on the page, with a brief highlight so the reader can see which
+   * of a dozen comments they were sent to.
+   */
+  const [highlighted, setHighlighted] = useState<string | null>(null);
+  const handledHash = useRef<string | null>(null);
+
+  useEffect(() => {
+    if (comments.length === 0) return;
+
+    let timer: ReturnType<typeof setTimeout> | undefined;
+
+    const reveal = () => {
+      const hash = window.location.hash;
+      if (!hash.startsWith("#comment-") || handledHash.current === hash) return;
+
+      const id = hash.slice("#comment-".length);
+      const element = document.getElementById(`comment-${id}`);
+      if (!element) return;
+
+      handledHash.current = hash;
+      element.scrollIntoView({ behavior: "smooth", block: "center" });
+      setHighlighted(id);
+      timer = setTimeout(() => setHighlighted(null), 2600);
+    };
+
+    reveal();
+    // Covers arriving from a notification while already on this task, where
+    // only the fragment changes and nothing remounts.
+    window.addEventListener("hashchange", reveal);
+    return () => {
+      window.removeEventListener("hashchange", reveal);
+      clearTimeout(timer);
+    };
+  }, [comments]);
 
   // An "empty" Tiptap document is still "<p></p>", so check the text content.
   const hasContent =
@@ -71,7 +110,15 @@ export function CommentList({ comments, taskId, onCommentAdded }: CommentListPro
       {comments.length > 0 && (
         <ol className="space-y-5">
           {comments.map((comment) => (
-            <li key={comment.id} className="flex gap-3">
+            <li
+              key={comment.id}
+              id={`comment-${comment.id}`}
+              className={cn(
+                "flex scroll-mt-24 gap-3 rounded-lg transition-colors duration-500",
+                highlighted === comment.id &&
+                  "-mx-2 bg-primary/[0.07] px-2 py-2 ring-1 ring-primary/20"
+              )}
+            >
               <span className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-primary/10 text-xs font-semibold text-primary ring-1 ring-primary/15">
                 {initialsFor(comment.author)}
               </span>

@@ -26,6 +26,10 @@ integration over the Model Context Protocol.
 - **Rich Text Editor** — Tiptap with headings, lists, code blocks, links, tables,
   and image upload by file picker, paste, or drag-and-drop
 - **Comments** — Per-task discussion
+- **Notifications** — A bell in the sidebar with an unread badge, a full feed at
+  `/notifications`, and a deep link on every entry that opens the exact task or
+  comment it refers to. Covers assignments, field edits (including a card
+  dragged to another column), comments, due-date warnings and account approval
 - **File Attachments** — Uploads to Supabase Storage, recorded against the task
 - **Admin Settings** — Approve or decline new sign-ups, manage roles
 - **Dark Mode**
@@ -48,6 +52,16 @@ signs up, so `auth.uid()` can be used directly as a foreign key.
 DDL is owned by Supabase migrations rather than `prisma migrate`.
 `prisma/schema.prisma` describes the existing tables so Prisma can query them;
 if you change it, apply a matching SQL migration in Supabase.
+
+**Notifications fan out on write, and pick their channel per event.**
+`src/lib/notifications/dispatch.ts` is the single place that decides who hears
+about something. It writes one `Notification` row per recipient when the event
+happens, so reading a feed is one indexed query with no joins. Every event
+lands in the in-app feed; only the interruption-worthy ones — assignment,
+comment, approval, the due-date digest — also send email. Field edits stay in
+the bell, because a status nudge does not belong in anyone's inbox. Everything
+runs inside `after()`, and every failure is logged and swallowed: a notification
+must never be able to fail the write that triggered it.
 
 ## Getting Started
 
@@ -223,21 +237,26 @@ src/
 │                        # it must sit beside app/, so inside src/ — not the repo root.
 ├── app/
 │   ├── (auth)/          # Login & signup pages
-│   ├── (dashboard)/     # Dashboard, board, list, calendar, task detail
-│   ├── api/             # Route handlers (tasks, comments, attachments, users)
+│   ├── (dashboard)/     # Dashboard, board, list, calendar, notifications, task detail
+│   ├── api/             # Route handlers (tasks, comments, attachments, users,
+│   │                    # notifications)
 │   └── auth/callback/   # Email confirmation / OAuth callback
 ├── components/
 │   ├── editor/          # Tiptap rich text editor
+│   ├── notifications/   # Sidebar bell + feed row
 │   ├── tasks/           # Task cards, creation dialog, comments
 │   ├── ui/              # shadcn/ui components
 │   └── sidebar.tsx      # Navigation sidebar
 ├── lib/
 │   ├── auth.ts          # Session helpers + auth-to-User reconciliation
+│   ├── email/           # Brevo client + email markup
+│   ├── notifications/   # Who gets told what, over which channel
 │   ├── prisma.ts        # Prisma client singleton (taskflow schema)
 │   ├── storage.ts       # Supabase Storage upload helpers
 │   ├── supabase/        # Supabase clients (browser, server, session)
 │   ├── tasks.ts         # Shared query shape + serialisation
 │   ├── types.ts         # Shared types and display config
+│   ├── use-notifications.ts  # Shared feed store + polling
 │   └── validation.ts    # Zod request schemas
 └── generated/prisma/    # Generated Prisma client (gitignored)
 ```

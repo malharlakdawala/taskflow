@@ -2,7 +2,7 @@ import { NextResponse, after } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireAdmin } from "@/lib/auth";
 import { updateMemberSchema, formatZodError } from "@/lib/validation";
-import { notifyAccountApproved } from "@/lib/email/notify";
+import { notifyAccountApproved } from "@/lib/notifications/dispatch";
 
 /**
  * Approve, reject, revoke, or change the role of a member. Admin only.

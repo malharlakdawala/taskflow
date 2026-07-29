@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { notifyDueSoon } from "@/lib/email/notify";
+import { notifyDueSoon } from "@/lib/notifications/dispatch";
 
 /**
  * Daily digest of overdue and soon-due tasks, one email per assignee.

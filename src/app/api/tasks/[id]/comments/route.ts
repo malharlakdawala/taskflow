@@ -4,7 +4,7 @@ import { requireMember } from "@/lib/auth";
 import { sanitizeOrNull } from "@/lib/sanitize";
 import { createCommentSchema, formatZodError } from "@/lib/validation";
 import { serializeComment } from "@/lib/tasks";
-import { notifyCommentAdded } from "@/lib/email/notify";
+import { notifyCommentAdded } from "@/lib/notifications/dispatch";
 
 export async function GET(
   request: Request,
@@ -65,6 +65,7 @@ export async function POST(
   after(() =>
     notifyCommentAdded({
       taskId: id,
+      commentId: comment.id,
       commentHtml: content,
       actorId: guard.user.id,
     })
