@@ -8,6 +8,7 @@ import {
   KanbanSquare,
   List,
   Calendar,
+  FolderKanban,
   Settings,
   LogOut,
   Moon,
@@ -16,6 +17,8 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { NotificationBell } from "@/components/notifications/notification-bell";
+import { ProjectDot } from "@/components/projects/project-badge";
+import { useProjects } from "@/lib/use-projects";
 import { signOut } from "@/app/(auth)/actions";
 import { useTheme } from "next-themes";
 import type { SessionUser } from "@/lib/types";
@@ -25,11 +28,16 @@ const navigation = [
   { name: "Board", href: "/board", icon: KanbanSquare },
   { name: "List", href: "/list", icon: List },
   { name: "Calendar", href: "/calendar", icon: Calendar },
+  { name: "Projects", href: "/projects", icon: FolderKanban },
 ];
 
 export function Sidebar({ user }: { user: SessionUser }) {
   const pathname = usePathname();
   const { theme, setTheme } = useTheme();
+  const { projects } = useProjects();
+
+  // Archived projects leave the sidebar — that is what archiving is for.
+  const activeProjects = projects.filter((project) => !project.archived);
 
   const isAdmin = user.role === "ADMIN";
   // Settings is for everyone now — members manage their own MCP tokens there.
@@ -70,7 +78,7 @@ export function Sidebar({ user }: { user: SessionUser }) {
         <NotificationBell />
       </div>
 
-      <nav className="flex-1 space-y-0.5 p-3">
+      <nav className="flex-1 space-y-0.5 overflow-y-auto p-3">
         <p className="px-3 pb-2 pt-1 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
           Workspace
         </p>
@@ -108,6 +116,37 @@ export function Sidebar({ user }: { user: SessionUser }) {
             </Link>
           );
         })}
+
+        {/* Each project's own shortcut into the list, filtered to it. Only
+            rendered when there are projects, so a workspace that never uses
+            them never sees an empty heading. */}
+        {activeProjects.length > 0 && (
+          <div className="pt-4">
+            <p className="px-3 pb-2 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+              Projects
+            </p>
+            {activeProjects.map((project) => (
+              <Link
+                key={project.id}
+                href={`/list?project=${project.id}`}
+                className={cn(
+                  "flex items-center gap-2.5 rounded-lg px-3 py-1.5 text-sm",
+                  "text-muted-foreground transition-colors duration-150",
+                  "hover:bg-sidebar-accent/50 hover:text-foreground",
+                  "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
+                )}
+              >
+                <ProjectDot color={project.color} />
+                <span className="truncate">{project.name}</span>
+                {project.taskCount > 0 && (
+                  <span className="ml-auto shrink-0 text-[11px] tabular-nums text-muted-foreground/70">
+                    {project.taskCount}
+                  </span>
+                )}
+              </Link>
+            ))}
+          </div>
+        )}
       </nav>
 
       <div className="space-y-1 border-t p-3">
