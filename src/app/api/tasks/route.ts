@@ -1,4 +1,5 @@
 import { NextResponse, after } from "next/server";
+import { Prisma } from "@/generated/prisma/client";
 import { prisma } from "@/lib/prisma";
 import { requireMember } from "@/lib/auth";
 import { sanitizeOrNull } from "@/lib/sanitize";
@@ -10,6 +11,9 @@ import {
   serializeTaskRow,
   serializeTask,
 } from "@/lib/tasks";
+
+const unknownProject = () =>
+  NextResponse.json({ error: "Project not found" }, { status: 400 });
 
 export async function GET() {
   const guard = await requireMember();
@@ -35,7 +39,7 @@ export async function POST(request: Request) {
     return NextResponse.json(formatZodError(parsed.error), { status: 400 });
   }
 
-  const { title, description, status, priority, dueDate, assigneeId } =
+  const { title, description, status, priority, dueDate, assigneeId, projectId } =
     parsed.data;
   const resolvedStatus = status ?? "TODO";
 
@@ -45,20 +49,36 @@ export async function POST(request: Request) {
     select: { order: true },
   });
 
-  const task = await prisma.task.create({
-    data: {
-      title,
-      description: sanitizeOrNull(description) ?? undefined,
-      status: resolvedStatus,
-      priority: priority ?? "NONE",
-      dueDate: dueDate ? new Date(dueDate) : undefined,
-      order: (last?.order ?? 0) + 1000,
-      assigneeId: assigneeId ?? guard.user.id,
-      createdById: guard.user.id,
-    },
-    relationLoadStrategy: "join",
-    include: TASK_DETAIL_INCLUDE,
-  });
+  let task;
+  try {
+    task = await prisma.task.create({
+      data: {
+        title,
+        description: sanitizeOrNull(description) ?? undefined,
+        status: resolvedStatus,
+        priority: priority ?? "NONE",
+        dueDate: dueDate ? new Date(dueDate) : undefined,
+        order: (last?.order ?? 0) + 1000,
+        // Null is the default: a task filed nowhere is unfiled, not invalid.
+        projectId: projectId ?? null,
+        assigneeId: assigneeId ?? guard.user.id,
+        createdById: guard.user.id,
+      },
+      relationLoadStrategy: "join",
+      include: TASK_DETAIL_INCLUDE,
+    });
+  } catch (error) {
+    // A well-formed uuid for a project that does not exist is a client mistake,
+    // not a server fault — and an MCP client working from a stale list is the
+    // likeliest source of one.
+    if (
+      error instanceof Prisma.PrismaClientKnownRequestError &&
+      error.code === "P2003"
+    ) {
+      return unknownProject();
+    }
+    throw error;
+  }
 
   // A task created straight onto someone else's plate is an assignment; one
   // that defaults to the creator is not, and notifyTaskAssigned skips it.

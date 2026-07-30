@@ -49,8 +49,16 @@ export async function PATCH(
     return NextResponse.json(formatZodError(parsed.error), { status: 400 });
   }
 
-  const { title, description, status, priority, dueDate, assigneeId, order } =
-    parsed.data;
+  const {
+    title,
+    description,
+    status,
+    priority,
+    dueDate,
+    assigneeId,
+    projectId,
+    order,
+  } = parsed.data;
 
   // Fields are applied individually so only allow-listed columns can change.
   const data: Prisma.TaskUncheckedUpdateInput = {};
@@ -63,6 +71,9 @@ export async function PATCH(
   if (priority !== undefined) data.priority = priority;
   if (dueDate !== undefined) data.dueDate = dueDate ? new Date(dueDate) : null;
   if (assigneeId !== undefined) data.assigneeId = assigneeId;
+  // Null unfiles the task, which is a legitimate destination rather than a
+  // missing value — so this is only skipped when the key is absent entirely.
+  if (projectId !== undefined) data.projectId = projectId;
   if (order !== undefined) data.order = order;
 
   // Notifications need to know what the values were, and only the caller of
@@ -124,11 +135,13 @@ export async function PATCH(
 
     return NextResponse.json(serializeTask(task));
   } catch (error) {
-    if (
-      error instanceof Prisma.PrismaClientKnownRequestError &&
-      error.code === "P2025"
-    ) {
-      return notFound();
+    if (error instanceof Prisma.PrismaClientKnownRequestError) {
+      if (error.code === "P2025") return notFound();
+      // A well-formed uuid for a project that no longer exists — most likely an
+      // MCP client working from a stale list.
+      if (error.code === "P2003") {
+        return NextResponse.json({ error: "Project not found" }, { status: 400 });
+      }
     }
     throw error;
   }

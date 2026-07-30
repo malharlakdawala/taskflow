@@ -25,13 +25,18 @@ export async function PATCH(request: Request) {
     return NextResponse.json(formatZodError(parsed.error), { status: 400 });
   }
 
-  const { ids, status, priority, assigneeId, dueDate } = parsed.data;
+  const { ids, status, priority, assigneeId, dueDate, projectId } = parsed.data;
 
   const data: Prisma.TaskUncheckedUpdateManyInput = {};
   if (status !== undefined) data.status = status;
   if (priority !== undefined) data.priority = priority;
   if (assigneeId !== undefined) data.assigneeId = assigneeId;
   if (dueDate !== undefined) data.dueDate = dueDate ? new Date(dueDate) : null;
+  // Refiling in bulk is the point of this route for projects: selecting a
+  // pile of unfiled tasks and giving them a home is a one-request operation.
+  // Null moves them back to unfiled. A refile notifies nobody, deliberately —
+  // summarizeTaskChanges ignores it, so nothing lands in anyone's inbox.
+  if (projectId !== undefined) data.projectId = projectId;
 
   // What the rows looked like before, read once and reused for both the
   // "who is this newly on?" question and the change summary. Only the columns
@@ -59,10 +64,21 @@ export async function PATCH(request: Request) {
           .filter((task) => task.assigneeId !== nextAssigneeId)
           .map((task) => task.id);
 
-  const result = await prisma.task.updateMany({
-    where: { id: { in: ids } },
-    data,
-  });
+  let result;
+  try {
+    result = await prisma.task.updateMany({
+      where: { id: { in: ids } },
+      data,
+    });
+  } catch (error) {
+    if (
+      error instanceof Prisma.PrismaClientKnownRequestError &&
+      error.code === "P2003"
+    ) {
+      return NextResponse.json({ error: "Project not found" }, { status: 400 });
+    }
+    throw error;
+  }
 
   // Every selected row ends up with the same values, so one summary describes
   // the whole operation. The per-row diff is only used to drop tasks that were

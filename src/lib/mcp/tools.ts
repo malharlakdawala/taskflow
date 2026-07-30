@@ -5,6 +5,7 @@ import { z } from "zod";
 import { Prisma } from "@/generated/prisma/client";
 import { prisma } from "@/lib/prisma";
 import type { AppUser } from "@/lib/auth";
+import { PROJECT_COLORS, type ProjectColor } from "@/lib/types";
 import { sanitizeOrNull } from "@/lib/sanitize";
 import { toRichHtml } from "@/lib/rich-text";
 import { toPlainText } from "@/lib/utils";
@@ -28,6 +29,10 @@ import {
  * Deliberately a smaller surface than the REST API: no attachments (there is
  * no file to upload over stdio), no bulk edit, no reordering. These are the
  * operations that make sense to ask for in a sentence.
+ *
+ * Projects can be listed, created, and filed into, but not renamed, archived
+ * or deleted — reshaping how a workspace is organised is a decision someone
+ * should make on the projects screen, where the task counts are visible.
  */
 
 const STATUSES = ["BACKLOG", "TODO", "IN_PROGRESS", "IN_REVIEW", "DONE"] as const;
@@ -89,6 +94,8 @@ const TASK_SUMMARY = {
   createdAt: true,
   updatedAt: true,
   assignee: { select: { email: true, name: true } },
+  // Named, not id'd: the name is what every project argument here expects back.
+  project: { select: { name: true } },
 } satisfies Prisma.TaskSelect;
 
 async function resolveAssignee(email: string | undefined): Promise<string | null> {
@@ -102,6 +109,36 @@ async function resolveAssignee(email: string | undefined): Promise<string | null
     throw new McpToolError(`${email} is not an approved member`);
   }
   return user.id;
+}
+
+/**
+ * Projects are addressed by name rather than id, for the same reason members
+ * are addressed by email: an agent should be able to name a thing the way a
+ * person would. Matching is case-insensitive, exactly as the unique index is,
+ * so "website" finds "Website".
+ *
+ * `forFiling` is the difference between reading and writing. Filtering a list
+ * by an archived project is reasonable; putting new work into one is almost
+ * certainly a mistake, because archived projects have left every picker.
+ */
+async function resolveProject(
+  name: string | undefined,
+  { forFiling = false }: { forFiling?: boolean } = {}
+): Promise<string | null> {
+  if (!name) return null;
+
+  const project = await prisma.project.findFirst({
+    where: { name: { equals: name, mode: "insensitive" } },
+    select: { id: true, name: true, archived: true },
+  });
+
+  if (!project) throw new McpToolError(`No project called "${name}"`);
+  if (forFiling && project.archived) {
+    throw new McpToolError(
+      `"${project.name}" is archived — unarchive it before filing work there`
+    );
+  }
+  return project.id;
 }
 
 /** YYYY-MM-DD or a full ISO timestamp; anything else is rejected loudly. */
@@ -127,6 +164,7 @@ const createTask: McpTool = {
       priority: enumOf(PRIORITIES, "Defaults to NONE"),
       due_date: str("Due date as YYYY-MM-DD"),
       assignee_email: str("Member to assign it to. Defaults to you."),
+      project: str("Project name to file it under. Defaults to unfiled."),
     },
     ["title"]
   ),
@@ -137,6 +175,7 @@ const createTask: McpTool = {
     priority: z.enum(PRIORITIES).optional(),
     due_date: z.string().optional(),
     assignee_email: z.string().optional(),
+    project: z.string().optional(),
   }),
   async run(args, actor) {
     const input = args as {
@@ -146,9 +185,11 @@ const createTask: McpTool = {
       priority?: (typeof PRIORITIES)[number];
       due_date?: string;
       assignee_email?: string;
+      project?: string;
     };
 
     const assigneeId = await resolveAssignee(input.assignee_email);
+    const projectId = await resolveProject(input.project, { forFiling: true });
     const status = input.status ?? "TODO";
 
     // Same ordering rule as the REST route: new work lands at the bottom of
@@ -168,6 +209,7 @@ const createTask: McpTool = {
         dueDate: parseDate(input.due_date) ?? undefined,
         order: (last?.order ?? 0) + 1000,
         assigneeId: assigneeId ?? actor.id,
+        projectId,
         createdById: actor.id,
       },
       select: TASK_SUMMARY,
@@ -189,13 +231,18 @@ const createTask: McpTool = {
 const listTasks: McpTool = {
   name: "list_tasks",
   description:
-    "List tasks, newest first, optionally filtered by status, priority or " +
-    "assignee.",
+    "List tasks, newest first, optionally filtered by status, priority, " +
+    "assignee or project.",
   inputSchema: object({
     status: enumOf(STATUSES, "Only tasks with this status"),
     priority: enumOf(PRIORITIES, "Only tasks with this priority"),
     assignee_email: str("Only tasks assigned to this member"),
     mine: { type: "boolean", description: "Only tasks assigned to you" },
+    project: str("Only tasks in this project, by name"),
+    unfiled: {
+      type: "boolean",
+      description: "Only tasks that are in no project at all",
+    },
     limit: {
       type: "number",
       description: "How many to return (1-100, default 20)",
@@ -206,6 +253,8 @@ const listTasks: McpTool = {
     priority: z.enum(PRIORITIES).optional(),
     assignee_email: z.string().optional(),
     mine: z.boolean().optional(),
+    project: z.string().optional(),
+    unfiled: z.boolean().optional(),
     limit: z.number().int().min(1).max(100).optional(),
   }),
   async run(args, actor) {
@@ -214,18 +263,29 @@ const listTasks: McpTool = {
       priority?: (typeof PRIORITIES)[number];
       assignee_email?: string;
       mine?: boolean;
+      project?: string;
+      unfiled?: boolean;
       limit?: number;
     };
+
+    if (input.unfiled && input.project) {
+      throw new McpToolError(
+        "Pass either project or unfiled, not both — unfiled means no project"
+      );
+    }
 
     const assigneeId = input.mine
       ? actor.id
       : await resolveAssignee(input.assignee_email);
+    const projectId = await resolveProject(input.project);
 
     const tasks = await prisma.task.findMany({
       where: {
         ...(input.status && { status: input.status }),
         ...(input.priority && { priority: input.priority }),
         ...(assigneeId && { assigneeId }),
+        ...(projectId && { projectId }),
+        ...(input.unfiled && { projectId: null }),
       },
       select: TASK_SUMMARY,
       relationLoadStrategy: "join",
@@ -291,8 +351,8 @@ const getTask: McpTool = {
 const updateTask: McpTool = {
   name: "update_task",
   description:
-    "Change a task's title, description, status, priority, due date or " +
-    "assignee. Only the fields you pass are touched.",
+    "Change a task's title, description, status, priority, due date, " +
+    "assignee or project. Only the fields you pass are touched.",
   inputSchema: object(
     {
       task_id: str("Task id"),
@@ -302,6 +362,7 @@ const updateTask: McpTool = {
       priority: enumOf(PRIORITIES, "New priority"),
       due_date: str("New due date as YYYY-MM-DD, or empty string to clear it"),
       assignee_email: str("Member to reassign it to, or empty string to unassign"),
+      project: str("Project name to move it to, or empty string to unfile it"),
     },
     ["task_id"]
   ),
@@ -313,6 +374,7 @@ const updateTask: McpTool = {
     priority: z.enum(PRIORITIES).optional(),
     due_date: z.string().optional(),
     assignee_email: z.string().optional(),
+    project: z.string().optional(),
   }),
   async run(args, actor) {
     const input = args as {
@@ -323,6 +385,7 @@ const updateTask: McpTool = {
       priority?: (typeof PRIORITIES)[number];
       due_date?: string;
       assignee_email?: string;
+      project?: string;
     };
 
     const data: Prisma.TaskUncheckedUpdateInput = {};
@@ -341,6 +404,13 @@ const updateTask: McpTool = {
         ? await resolveAssignee(input.assignee_email)
         : null;
       data.assigneeId = nextAssigneeId;
+    }
+
+    // Same convention: "" unfiles the task rather than meaning "leave it alone".
+    if (input.project !== undefined) {
+      data.projectId = input.project
+        ? await resolveProject(input.project, { forFiling: true })
+        : null;
     }
 
     if (Object.keys(data).length === 0) {
@@ -525,6 +595,101 @@ const moveTask: McpTool = {
   },
 };
 
+const listProjects: McpTool = {
+  name: "list_projects",
+  description:
+    "Projects, with how many tasks are filed in each. Names from here are " +
+    "what the `project` argument on the task tools expects.",
+  inputSchema: object({
+    include_archived: {
+      type: "boolean",
+      description: "Include retired projects. Defaults to false.",
+    },
+  }),
+  schema: z.object({ include_archived: z.boolean().optional() }),
+  async run(args) {
+    const input = args as { include_archived?: boolean };
+
+    const projects = await prisma.project.findMany({
+      where: input.include_archived ? {} : { archived: false },
+      select: {
+        name: true,
+        description: true,
+        color: true,
+        archived: true,
+        _count: { select: { tasks: true } },
+      },
+      relationLoadStrategy: "join",
+      orderBy: [{ archived: "asc" }, { name: "asc" }],
+    });
+
+    return {
+      count: projects.length,
+      projects: projects.map(({ _count, ...rest }) => ({
+        ...rest,
+        taskCount: _count.tasks,
+      })),
+    };
+  },
+};
+
+const createProject: McpTool = {
+  name: "create_project",
+  description:
+    "Create a project to group tasks under. Names are unique, ignoring case.",
+  inputSchema: object(
+    {
+      name: str("Project name"),
+      description: str("What the project is for"),
+      color: enumOf(PROJECT_COLORS, "Colour for the project's chip"),
+    },
+    ["name"]
+  ),
+  schema: z.object({
+    name: z.string().trim().min(1).max(120),
+    description: z.string().trim().max(2000).optional(),
+    color: z.enum(PROJECT_COLORS).optional(),
+  }),
+  async run(args, actor) {
+    const input = args as {
+      name: string;
+      description?: string;
+      color?: ProjectColor;
+    };
+
+    try {
+      const project = await prisma.project.create({
+        data: {
+          name: input.name,
+          description: input.description ?? null,
+          color: input.color ?? null,
+          createdById: actor.id,
+        },
+        select: {
+          id: true,
+          name: true,
+          description: true,
+          color: true,
+          archived: true,
+        },
+      });
+      return { project };
+    } catch (error) {
+      // The case-insensitive unique index only reports at write time, so a
+      // duplicate arrives here rather than from a pre-read.
+      if (
+        error instanceof Prisma.PrismaClientKnownRequestError &&
+        error.code === "P2002"
+      ) {
+        throw new McpToolError(
+          `A project called "${input.name}" already exists`
+        );
+      }
+      throw error;
+    }
+  },
+};
+
 export const TOOLS: McpTool[] = [
   listTasks,
   getTask,
@@ -534,6 +699,8 @@ export const TOOLS: McpTool[] = [
   deleteTask,
   addComment,
   listMembers,
+  listProjects,
+  createProject,
 ];
 
 export const TOOLS_BY_NAME = new Map(TOOLS.map((tool) => [tool.name, tool]));
