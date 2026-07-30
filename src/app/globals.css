@@ -123,6 +123,34 @@
   --priority-none: oklch(0.65 0.01 275);
   --priority-none-soft: oklch(0.96 0.005 275);
 
+  /* Project palette. Identity, not workflow state — a project's colour means
+     nothing except "this is that project", so these are evenly spaced round the
+     hue circle and deliberately distinguishable from the status hues above. */
+  --project-violet: oklch(0.58 0.2 288);
+  --project-violet-soft: oklch(0.96 0.03 288);
+  --project-violet-ink: oklch(0.44 0.18 288);
+  --project-blue: oklch(0.6 0.17 240);
+  --project-blue-soft: oklch(0.96 0.03 240);
+  --project-blue-ink: oklch(0.45 0.15 240);
+  --project-teal: oklch(0.62 0.12 195);
+  --project-teal-soft: oklch(0.95 0.03 195);
+  --project-teal-ink: oklch(0.45 0.1 195);
+  --project-green: oklch(0.64 0.15 145);
+  --project-green-soft: oklch(0.95 0.04 145);
+  --project-green-ink: oklch(0.45 0.12 145);
+  --project-amber: oklch(0.74 0.15 78);
+  --project-amber-soft: oklch(0.96 0.05 78);
+  --project-amber-ink: oklch(0.49 0.12 70);
+  --project-orange: oklch(0.67 0.19 40);
+  --project-orange-soft: oklch(0.96 0.04 40);
+  --project-orange-ink: oklch(0.47 0.16 40);
+  --project-rose: oklch(0.62 0.21 8);
+  --project-rose-soft: oklch(0.96 0.03 8);
+  --project-rose-ink: oklch(0.46 0.19 8);
+  --project-slate: oklch(0.55 0.03 260);
+  --project-slate-soft: oklch(0.955 0.01 260);
+  --project-slate-ink: oklch(0.4 0.03 260);
+
   --sidebar: oklch(0.985 0.006 275);
   --sidebar-foreground: oklch(0.19 0.02 275);
   --sidebar-primary: oklch(0.54 0.21 274);
@@ -186,6 +214,31 @@
   --priority-none: oklch(0.62 0.01 275);
   --priority-none-soft: oklch(0.28 0.01 275);
 
+  --project-violet: oklch(0.7 0.18 288);
+  --project-violet-soft: oklch(0.31 0.07 288);
+  --project-violet-ink: oklch(0.85 0.1 288);
+  --project-blue: oklch(0.71 0.15 240);
+  --project-blue-soft: oklch(0.3 0.06 240);
+  --project-blue-ink: oklch(0.85 0.09 240);
+  --project-teal: oklch(0.73 0.11 195);
+  --project-teal-soft: oklch(0.3 0.05 195);
+  --project-teal-ink: oklch(0.86 0.08 195);
+  --project-green: oklch(0.74 0.14 145);
+  --project-green-soft: oklch(0.3 0.06 145);
+  --project-green-ink: oklch(0.86 0.1 145);
+  --project-amber: oklch(0.82 0.14 78);
+  --project-amber-soft: oklch(0.32 0.06 78);
+  --project-amber-ink: oklch(0.88 0.1 78);
+  --project-orange: oklch(0.76 0.17 40);
+  --project-orange-soft: oklch(0.32 0.07 40);
+  --project-orange-ink: oklch(0.87 0.1 40);
+  --project-rose: oklch(0.71 0.19 8);
+  --project-rose-soft: oklch(0.32 0.08 8);
+  --project-rose-ink: oklch(0.86 0.1 8);
+  --project-slate: oklch(0.68 0.03 260);
+  --project-slate-soft: oklch(0.3 0.02 260);
+  --project-slate-ink: oklch(0.82 0.02 260);
+
   --sidebar: oklch(0.19 0.018 275);
   --sidebar-foreground: oklch(0.96 0.005 275);
   --sidebar-primary: oklch(0.68 0.19 274);
@@ -212,6 +265,19 @@
 [data-priority="MEDIUM"] { --tone: var(--priority-medium); --tone-soft: var(--priority-medium-soft); }
 [data-priority="LOW"]    { --tone: var(--priority-low);    --tone-soft: var(--priority-low-soft); }
 [data-priority="NONE"]   { --tone: var(--priority-none);   --tone-soft: var(--priority-none-soft); }
+
+/* Projects join the same system, so a project chip or dot needs no colour of
+   its own — it sets data-project-color and reads --tone like everything else.
+   An unrecognised or absent value falls through to the slate defaults below. */
+[data-project-color]          { --tone: var(--project-slate);  --tone-soft: var(--project-slate-soft);  --tone-ink: var(--project-slate-ink); }
+[data-project-color="violet"] { --tone: var(--project-violet); --tone-soft: var(--project-violet-soft); --tone-ink: var(--project-violet-ink); }
+[data-project-color="blue"]   { --tone: var(--project-blue);   --tone-soft: var(--project-blue-soft);   --tone-ink: var(--project-blue-ink); }
+[data-project-color="teal"]   { --tone: var(--project-teal);   --tone-soft: var(--project-teal-soft);   --tone-ink: var(--project-teal-ink); }
+[data-project-color="green"]  { --tone: var(--project-green);  --tone-soft: var(--project-green-soft);  --tone-ink: var(--project-green-ink); }
+[data-project-color="amber"]  { --tone: var(--project-amber);  --tone-soft: var(--project-amber-soft);  --tone-ink: var(--project-amber-ink); }
+[data-project-color="orange"] { --tone: var(--project-orange); --tone-soft: var(--project-orange-soft); --tone-ink: var(--project-orange-ink); }
+[data-project-color="rose"]   { --tone: var(--project-rose);   --tone-soft: var(--project-rose-soft);   --tone-ink: var(--project-rose-ink); }
+[data-project-color="slate"]  { --tone: var(--project-slate);  --tone-soft: var(--project-slate-soft);  --tone-ink: var(--project-slate-ink); }
 
 @utility tone-chip {
   background-color: var(--tone-soft);

@@ -25,6 +25,43 @@ export interface Member extends User {
   assignedTaskCount: number;
 }
 
+/**
+ * The eight palette keys a project may carry, and the only values the API
+ * accepts for `color`. They are rendered into a `data-project-color` attribute
+ * that globals.css turns into a tone, so a free-form string here would be both
+ * a styling hole and an injection risk.
+ */
+export const PROJECT_COLORS = [
+  "violet",
+  "blue",
+  "teal",
+  "green",
+  "amber",
+  "orange",
+  "rose",
+  "slate",
+] as const;
+
+export type ProjectColor = (typeof PROJECT_COLORS)[number];
+
+/** What a task payload carries about the project it belongs to. */
+export interface ProjectSummary {
+  id: string;
+  name: string;
+  color: ProjectColor | null;
+  archived: boolean;
+}
+
+export interface Project extends ProjectSummary {
+  description: string | null;
+  createdById: string | null;
+  createdAt: string;
+  updatedAt: string;
+  /** How many tasks are filed here, and how many of those are done. */
+  taskCount: number;
+  doneCount: number;
+}
+
 export interface Task {
   id: string;
   title: string;
@@ -33,6 +70,9 @@ export interface Task {
   priority: TaskPriority;
   dueDate: string | null;
   order: number;
+  /** Null means unfiled — the UI calls this "No project". */
+  projectId: string | null;
+  project: ProjectSummary | null;
   assigneeId: string | null;
   assignee: User | null;
   createdById: string | null;
@@ -134,6 +174,20 @@ export const PRIORITY_ITEMS: Record<string, string> = {
   MEDIUM: "Medium",
   HIGH: "High",
   URGENT: "Urgent",
+};
+
+/** The label a project picker shows for "not in any project". */
+export const NO_PROJECT_LABEL = "No project";
+
+export const PROJECT_COLOR_ITEMS: Record<ProjectColor, string> = {
+  violet: "Violet",
+  blue: "Blue",
+  teal: "Teal",
+  green: "Green",
+  amber: "Amber",
+  orange: "Orange",
+  rose: "Rose",
+  slate: "Slate",
 };
 
 export const PRIORITY_CONFIG: Record<TaskPriority, { label: string; color: string }> = {

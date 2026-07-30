@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { PROJECT_COLORS } from "@/lib/types";
 
 export const TASK_STATUSES = [
   "BACKLOG",
@@ -35,6 +36,8 @@ export const createTaskSchema = z.object({
   priority: prioritySchema.optional(),
   dueDate: dueDateSchema.optional(),
   assigneeId: z.uuid().nullish(),
+  /** Null files the task nowhere, which is the default. */
+  projectId: z.uuid().nullish(),
 });
 
 /**
@@ -49,6 +52,7 @@ export const updateTaskSchema = z
     priority: prioritySchema,
     dueDate: dueDateSchema,
     assigneeId: z.uuid().nullable(),
+    projectId: z.uuid().nullable(),
     order: z.number().finite(),
   })
   .partial()
@@ -77,19 +81,44 @@ export const bulkUpdateSchema = z
     priority: prioritySchema.optional(),
     assigneeId: z.uuid().nullable().optional(),
     dueDate: dueDateSchema.optional(),
+    projectId: z.uuid().nullable().optional(),
   })
   .refine(
     (data) =>
       data.status !== undefined ||
       data.priority !== undefined ||
       data.assigneeId !== undefined ||
-      data.dueDate !== undefined,
+      data.dueDate !== undefined ||
+      data.projectId !== undefined,
     { message: "No fields to update" }
   );
 
 export const bulkDeleteSchema = z.object({
   ids: z.array(z.uuid()).min(1).max(500),
 });
+
+/**
+ * `color` is an enum rather than a string because the value ends up in a
+ * `data-project-color` attribute that CSS matches on. Names are trimmed and
+ * capped; case-insensitive uniqueness is enforced by the database index.
+ */
+export const createProjectSchema = z.object({
+  name: z.string().trim().min(1, "Name is required").max(120),
+  description: z.string().trim().max(2000).nullish(),
+  color: z.enum(PROJECT_COLORS).nullish(),
+});
+
+export const updateProjectSchema = z
+  .object({
+    name: z.string().trim().min(1, "Name is required").max(120),
+    description: z.string().trim().max(2000).nullable(),
+    color: z.enum(PROJECT_COLORS).nullable(),
+    archived: z.boolean(),
+  })
+  .partial()
+  .refine((data) => Object.keys(data).length > 0, {
+    message: "No fields to update",
+  });
 
 export const updateMemberSchema = z
   .object({

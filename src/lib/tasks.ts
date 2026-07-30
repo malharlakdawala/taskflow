@@ -1,6 +1,7 @@
 import type { Prisma } from "@/generated/prisma/client";
 import { sanitizeRichText } from "@/lib/sanitize";
 import { toRichHtml } from "@/lib/rich-text";
+import { PROJECT_SUMMARY, serializeProjectSummary } from "@/lib/projects";
 
 /** Only the user fields the UI renders — never leak approval state into task payloads. */
 const USER_SUMMARY = {
@@ -24,10 +25,12 @@ export const TASK_LIST_SELECT = {
   priority: true,
   dueDate: true,
   order: true,
+  projectId: true,
   assigneeId: true,
   createdById: true,
   createdAt: true,
   updatedAt: true,
+  project: { select: PROJECT_SUMMARY },
   assignee: { select: USER_SUMMARY },
   createdBy: { select: USER_SUMMARY },
   _count: { select: { comments: true, attachments: true } },
@@ -35,6 +38,7 @@ export const TASK_LIST_SELECT = {
 
 /** Full shape for the single-task detail page. */
 export const TASK_DETAIL_INCLUDE = {
+  project: { select: PROJECT_SUMMARY },
   assignee: { select: USER_SUMMARY },
   createdBy: { select: USER_SUMMARY },
   comments: {
@@ -75,9 +79,12 @@ function asSafeRichText(value: Prisma.JsonValue | null | undefined): string | nu
 
 /** List rows carry counts instead of the full comment/attachment arrays. */
 export function serializeTaskRow(task: TaskListRow) {
-  const { _count, ...rest } = task;
+  const { _count, project, ...rest } = task;
   return {
     ...rest,
+    // An unfiled task has no project at all, which the UI renders as
+    // "No project" rather than hiding the field.
+    project: project ? serializeProjectSummary(project) : null,
     description: asRichText(task.description),
     commentCount: _count.comments,
     attachmentCount: _count.attachments,
@@ -90,6 +97,7 @@ export function serializeTaskRow(task: TaskListRow) {
 export function serializeTask(task: TaskDetailRow) {
   return {
     ...task,
+    project: task.project ? serializeProjectSummary(task.project) : null,
     description: asSafeRichText(task.description),
     commentCount: task.comments.length,
     attachmentCount: task.attachments.length,
