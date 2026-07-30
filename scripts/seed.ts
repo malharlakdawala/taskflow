@@ -112,11 +112,12 @@ async function main() {
     });
   }
 
-  console.log("Creating tasks and comments…");
-  const { tasks, comments } = await seedDemoContent(prisma, ids);
+  console.log("Creating projects, tasks and comments…");
+  const { tasks, comments, projects } = await seedDemoContent(prisma, ids);
 
   console.log(
-    `\nDone — ${DEMO_PEOPLE.length} members, ${tasks} tasks, ${comments} comments.\n\n` +
+    `\nDone — ${DEMO_PEOPLE.length} members, ${projects} projects, ${tasks} tasks, ` +
+      `${comments} comments.\n\n` +
       "Sign in as any of:\n" +
       DEMO_PEOPLE.map((p) => `  ${p.email}  /  ${DEMO_PASSWORD}`).join("\n") +
       `\n\n${DEMO_PEOPLE[0].email} is the admin.\n`

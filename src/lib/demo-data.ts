@@ -1,6 +1,7 @@
 import "server-only";
 
 import type { PrismaClient } from "@/generated/prisma/client";
+import type { ProjectColor } from "@/lib/types";
 
 /**
  * The fictional workspace used by `npm run seed` and by the demo reset cron.
@@ -21,28 +22,74 @@ export const DEMO_PEOPLE = [
   { email: "priya@example.com", name: "Priya Raman", role: "MEMBER" as const },
 ];
 
-/** title, status, priority, due (days from now, null for none), assignee, creator */
+/**
+ * The bodies of work the tasks below are filed under. One is archived, because
+ * a workspace that has been running a while has finished projects in it, and
+ * that is the state the archive flag exists for.
+ */
+const PROJECTS = [
+  {
+    name: "Watering & reminders",
+    color: "blue",
+    description: "Scheduling, notifications and the care calendar.",
+  },
+  {
+    name: "Plant identification",
+    color: "green",
+    description:
+      "The species model, the database behind it, and the sensors it leans on.",
+  },
+  {
+    name: "App polish",
+    color: "violet",
+    description: "Screens, states and accessibility work in the mobile app.",
+  },
+  {
+    name: "Platform",
+    color: "slate",
+    description: "Storage, performance, and everything that is not a feature.",
+  },
+  {
+    name: "Spring launch",
+    color: "amber",
+    description: "Shipped in March. Kept around for reference.",
+    archived: true,
+  },
+] as const satisfies ReadonlyArray<{
+  name: string;
+  color: ProjectColor;
+  description: string;
+  archived?: boolean;
+}>;
+
+/**
+ * title, status, priority, due (days from now, null for none), assignee,
+ * creator, project (index into PROJECTS, or null for deliberately unfiled)
+ *
+ * Two are left unfiled on purpose: unfiled is a real, permanent state rather
+ * than a gap, and a demo where every task has a project would not show it.
+ */
 const TASKS = [
-  ["Watering reminders fire twice on daylight-saving days", "IN_PROGRESS", "URGENT", -2, 1, 0],
-  ["Plant identification model returns low confidence indoors", "IN_PROGRESS", "HIGH", 3, 2, 0],
-  ["Redesign the plant detail screen", "IN_PROGRESS", "MEDIUM", 6, 0, 2],
-  ["Offline mode for the care calendar", "IN_PROGRESS", "MEDIUM", 12, 1, 0],
-  ["Onboarding: ask for light conditions before species", "IN_REVIEW", "HIGH", 2, 2, 0],
-  ["Species database import from Trefle", "TODO", "HIGH", 8, 1, 0],
-  ["Push notification copy needs a pass", "TODO", "MEDIUM", 9, 0, 1],
-  ["Add a 'skip this week' action to reminders", "TODO", "MEDIUM", 14, 2, 0],
-  ["Empty state for someone with no plants yet", "TODO", "LOW", null, 0, 2],
-  ["Accessibility audit of the watering flow", "TODO", "HIGH", 5, 2, 0],
-  ["Support for succulent watering schedules", "TODO", "LOW", 21, 1, 2],
-  ["Investigate battery drain on Android 15", "TODO", "URGENT", 1, 1, 0],
-  ["Weekly digest email template", "TODO", "MEDIUM", 16, 0, 0],
-  ["Migrate photo storage off the legacy bucket", "TODO", "LOW", null, 2, 0],
-  ["Light sensor calibration for older devices", "BACKLOG", "LOW", null, 1, 0],
-  ["Community plant-swap board", "BACKLOG", "NONE", null, 0, 2],
-  ["Seasonal care tips content plan", "BACKLOG", "LOW", null, 2, 1],
-  ["Ship the repotting reminder", "DONE", "HIGH", -8, 1, 0],
-  ["Fix crash when a photo has no EXIF data", "DONE", "URGENT", -12, 2, 0],
-  ["Dark mode for the plant list", "DONE", "MEDIUM", -20, 0, 1],
+  ["Watering reminders fire twice on daylight-saving days", "IN_PROGRESS", "URGENT", -2, 1, 0, 0],
+  ["Plant identification model returns low confidence indoors", "IN_PROGRESS", "HIGH", 3, 2, 0, 1],
+  ["Redesign the plant detail screen", "IN_PROGRESS", "MEDIUM", 6, 0, 2, 2],
+  ["Offline mode for the care calendar", "IN_PROGRESS", "MEDIUM", 12, 1, 0, 0],
+  ["Onboarding: ask for light conditions before species", "IN_REVIEW", "HIGH", 2, 2, 0, 2],
+  ["Species database import from Trefle", "TODO", "HIGH", 8, 1, 0, 1],
+  ["Push notification copy needs a pass", "TODO", "MEDIUM", 9, 0, 1, 0],
+  ["Add a 'skip this week' action to reminders", "TODO", "MEDIUM", 14, 2, 0, 0],
+  ["Empty state for someone with no plants yet", "TODO", "LOW", null, 0, 2, 2],
+  ["Accessibility audit of the watering flow", "TODO", "HIGH", 5, 2, 0, 2],
+  ["Support for succulent watering schedules", "TODO", "LOW", 21, 1, 2, 0],
+  ["Investigate battery drain on Android 15", "TODO", "URGENT", 1, 1, 0, 3],
+  ["Weekly digest email template", "TODO", "MEDIUM", 16, 0, 0, 0],
+  ["Migrate photo storage off the legacy bucket", "TODO", "LOW", null, 2, 0, 3],
+  ["Light sensor calibration for older devices", "BACKLOG", "LOW", null, 1, 0, 1],
+  ["Community plant-swap board", "BACKLOG", "NONE", null, 0, 2, null],
+  ["Seasonal care tips content plan", "BACKLOG", "LOW", null, 2, 1, null],
+  ["Ship the repotting reminder", "DONE", "HIGH", -8, 1, 0, 4],
+  ["Fix crash when a photo has no EXIF data", "DONE", "URGENT", -12, 2, 0, 4],
+  ["Dark mode for the plant list", "DONE", "MEDIUM", -20, 0, 1, 2],
 ] as const;
 
 const HERO = "Redesign the plant detail screen";
@@ -67,6 +114,8 @@ const daysFromNow = (days: number) => new Date(Date.now() + days * 86_400_000);
  */
 export async function clearDemoContent(prisma: PrismaClient): Promise<void> {
   await prisma.task.deleteMany({});
+  // After the tasks, so this is never the delete that orphans anything.
+  await prisma.project.deleteMany({});
   await prisma.notification.deleteMany({});
   await prisma.apiToken.deleteMany({});
 }
@@ -78,11 +127,35 @@ export async function clearDemoContent(prisma: PrismaClient): Promise<void> {
 export async function seedDemoContent(
   prisma: PrismaClient,
   ids: string[]
-): Promise<{ tasks: number; comments: number }> {
+): Promise<{ tasks: number; comments: number; projects: number }> {
   const byTitle = new Map<string, string>();
   let order = 1000;
 
-  for (const [title, status, priority, due, assignee, creator] of TASKS) {
+  // Projects first: the tasks reference them by index.
+  const projectIds: string[] = [];
+  for (const project of PROJECTS) {
+    const created = await prisma.project.create({
+      data: {
+        name: project.name,
+        description: project.description,
+        color: project.color,
+        archived: "archived" in project ? project.archived : false,
+        createdById: ids[0],
+      },
+      select: { id: true },
+    });
+    projectIds.push(created.id);
+  }
+
+  for (const [
+    title,
+    status,
+    priority,
+    due,
+    assignee,
+    creator,
+    project,
+  ] of TASKS) {
     const task = await prisma.task.create({
       data: {
         title,
@@ -92,6 +165,7 @@ export async function seedDemoContent(
         order: (order += 1000),
         assigneeId: ids[assignee],
         createdById: ids[creator],
+        projectId: project === null ? null : projectIds[project],
         ...(title === HERO && { description: HERO_DESCRIPTION }),
       },
       select: { id: true },
@@ -147,5 +221,9 @@ export async function seedDemoContent(
     ],
   });
 
-  return { tasks: TASKS.length, comments: comments.length };
+  return {
+    tasks: TASKS.length,
+    comments: comments.length,
+    projects: PROJECTS.length,
+  };
 }

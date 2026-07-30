@@ -63,8 +63,8 @@ export async function GET(request: Request) {
 
   try {
     await clearDemoContent(prisma);
-    const { tasks, comments } = await seedDemoContent(prisma, ids);
-    return NextResponse.json({ success: true, tasks, comments });
+    const { tasks, comments, projects } = await seedDemoContent(prisma, ids);
+    return NextResponse.json({ success: true, tasks, comments, projects });
   } catch (error) {
     console.error("[cron] demo reset failed:", error);
     return NextResponse.json({ error: "Reset failed" }, { status: 500 });
