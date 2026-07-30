@@ -19,10 +19,17 @@ export function ProjectPicker({
   value,
   onChange,
   disabled,
+  /**
+   * What the trigger reads when nothing is selected. Only the trigger — the
+   * "no project" option keeps its real name, so the bulk bar can prompt with
+   * "Set project" while still offering unfiling as a destination.
+   */
+  placeholder = NO_PROJECT_LABEL,
 }: {
   value: string | null;
   onChange: (projectId: string | null) => void;
   disabled?: boolean;
+  placeholder?: string;
 }) {
   const { projects, isLoading } = useProjects();
 
@@ -56,8 +63,8 @@ export function ProjectPicker({
         {selected ? (
           <ProjectBadge project={selected} />
         ) : (
-          <SelectValue placeholder={isLoading ? "Loading…" : NO_PROJECT_LABEL}>
-            {() => NO_PROJECT_LABEL}
+          <SelectValue placeholder={isLoading ? "Loading…" : placeholder}>
+            {() => placeholder}
           </SelectValue>
         )}
       </SelectTrigger>

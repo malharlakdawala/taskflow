@@ -5,6 +5,7 @@ import Link from "next/link";
 import type { Task } from "@/lib/types";
 import { cn, toPlainText, initialsFor, displayName } from "@/lib/utils";
 import { PriorityBadge } from "@/components/tasks/status-badge";
+import { ProjectBadge } from "@/components/projects/project-badge";
 
 interface TaskCardProps {
   task: Task;
@@ -57,6 +58,14 @@ export function TaskCard({ task, isDragging }: TaskCardProps) {
           <p className="mt-1.5 line-clamp-2 text-xs leading-relaxed text-muted-foreground">
             {preview}
           </p>
+        )}
+
+        {/* The project reads as a label on the work rather than another piece
+            of metadata, so it sits above the counts on its own line. */}
+        {task.project && (
+          <div className="mt-2 flex">
+            <ProjectBadge project={task.project} className="max-w-[11rem]" />
+          </div>
         )}
 
         <div className="mt-3 flex items-center justify-between gap-2">

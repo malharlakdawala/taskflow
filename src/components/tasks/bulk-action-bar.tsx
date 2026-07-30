@@ -12,7 +12,9 @@ import {
 } from "@/components/ui/select";
 import { Trash2, X, Loader2 } from "lucide-react";
 import { AssigneePicker } from "@/components/tasks/assignee-picker";
+import { ProjectPicker } from "@/components/projects/project-picker";
 import { notify } from "@/lib/notify";
+import { useProjects } from "@/lib/use-projects";
 import type { Task } from "@/lib/types";
 import { STATUS_ITEMS, PRIORITY_ITEMS } from "@/lib/types";
 
@@ -35,6 +37,9 @@ export function BulkActionBar({
   onDeleted: (ids: string[]) => void;
 }) {
   const [isBusy, setIsBusy] = useState(false);
+  // Needed to build the optimistic chip: the route returns a count, not rows,
+  // so the new project has to be described from what the client already knows.
+  const { projects } = useProjects();
 
   if (selectedIds.length === 0) return null;
 
@@ -157,6 +162,36 @@ export function BulkActionBar({
             onChange={(assigneeId) =>
               apply({ assigneeId }, { assigneeId }, "Assignee updated")
             }
+          />
+        </div>
+
+        <div className="w-[190px]">
+          <ProjectPicker
+            value={null}
+            disabled={isBusy}
+            placeholder="Set project"
+            onChange={(projectId) => {
+              const project = projectId
+                ? projects.find((candidate) => candidate.id === projectId)
+                : undefined;
+              apply(
+                { projectId },
+                {
+                  projectId,
+                  // Trimmed to the summary shape a task carries, so the chips in
+                  // the rows update without waiting for a refetch.
+                  project: project
+                    ? {
+                        id: project.id,
+                        name: project.name,
+                        color: project.color,
+                        archived: project.archived,
+                      }
+                    : null,
+                },
+                projectId ? "Project updated" : "Project cleared"
+              );
+            }}
           />
         </div>
 

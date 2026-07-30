@@ -14,6 +14,10 @@ import { StatusDot } from "@/components/tasks/status-badge";
 import { cn } from "@/lib/utils";
 import { CreateTaskDialog } from "@/components/tasks/create-task-dialog";
 import { TaskCard } from "@/components/tasks/task-card";
+import {
+  ProjectFilter,
+  UNFILED_PROJECT,
+} from "@/components/projects/project-filter";
 import { notify } from "@/lib/notify";
 import type { Task, TaskStatus } from "@/lib/types";
 import { STATUS_ITEMS } from "@/lib/types";
@@ -33,6 +37,9 @@ export default function BoardPage() {
   const [tasks, setTasks] = useState<Task[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
+  // Local rather than in the URL, unlike the list: the board is a working
+  // surface you narrow and widen, not a view you link someone to.
+  const [projectFilter, setProjectFilter] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -57,6 +64,20 @@ export default function BoardPage() {
     };
   }, []);
 
+  const matchesProject = useCallback(
+    (task: Task) => {
+      if (!projectFilter) return true;
+      if (projectFilter === UNFILED_PROJECT) return task.projectId === null;
+      return task.projectId === projectFilter;
+    },
+    [projectFilter]
+  );
+
+  /**
+   * Every task, grouped and ordered. This stays unfiltered because a drop
+   * renumbers an entire column, and a column is a column whether or not the
+   * filter is hiding part of it.
+   */
   const tasksByColumn = useMemo(() => {
     const grouped = Object.fromEntries(
       columns.map((column) => [column, [] as Task[]])
@@ -70,6 +91,19 @@ export default function BoardPage() {
     }
     return grouped;
   }, [tasks]);
+
+  /** What is actually on screen, and what the drag indices refer to. */
+  const visibleByColumn = useMemo(() => {
+    const grouped = Object.fromEntries(
+      columns.map((column) => [column, tasksByColumn[column].filter(matchesProject)])
+    ) as Record<TaskStatus, Task[]>;
+    return grouped;
+  }, [tasksByColumn, matchesProject]);
+
+  const visibleCount = useMemo(
+    () => columns.reduce((total, column) => total + visibleByColumn[column].length, 0),
+    [visibleByColumn]
+  );
 
   const persistOrder = useCallback(
     async (
@@ -108,10 +142,23 @@ export default function BoardPage() {
     if (!moved) return;
 
     // Rebuild the destination column with the card in its new slot.
+    //
+    // The drop index counts rendered cards, but the renumbering below has to
+    // cover the whole column — otherwise dragging inside a filtered board would
+    // renumber only what is visible and scramble those rows against the ones
+    // hidden by the filter. So the visible card the moved one landed in front of
+    // is used as an anchor to find the real position. With no filter on, the
+    // visible column and the full column are the same list and this is a no-op.
     const destinationTasks = tasksByColumn[destinationStatus].filter(
       (task) => task.id !== draggableId
     );
-    destinationTasks.splice(destination.index, 0, {
+    const visibleDestination = destinationTasks.filter(matchesProject);
+    const anchor = visibleDestination[destination.index];
+    const insertAt = anchor
+      ? destinationTasks.findIndex((task) => task.id === anchor.id)
+      : destinationTasks.length;
+
+    destinationTasks.splice(insertAt, 0, {
       ...moved,
       status: destinationStatus,
     });
@@ -149,21 +196,25 @@ export default function BoardPage() {
         <div>
           <h1 className="text-2xl font-bold tracking-tight">Board</h1>
           <p className="text-sm text-muted-foreground">
-            {tasks.length} {tasks.length === 1 ? "task" : "tasks"} · drag a card
-            to change its status
+            {visibleCount} {visibleCount === 1 ? "task" : "tasks"}
+            {projectFilter ? ` of ${tasks.length}` : ""} · drag a card to change
+            its status
           </p>
         </div>
-        <Button onClick={() => setIsCreateDialogOpen(true)} className="gap-2">
-          <Plus className="h-4 w-4" />
-          New task
-        </Button>
+        <div className="flex shrink-0 items-center gap-2">
+          <ProjectFilter value={projectFilter} onChange={setProjectFilter} />
+          <Button onClick={() => setIsCreateDialogOpen(true)} className="gap-2">
+            <Plus className="h-4 w-4" />
+            New task
+          </Button>
+        </div>
       </header>
 
       <div className="flex-1 overflow-x-auto p-6">
         <DragDropContext onDragEnd={handleDragEnd}>
           <div className="flex h-full min-w-max items-stretch gap-4">
             {columns.map((column) => {
-              const columnTasks = tasksByColumn[column];
+              const columnTasks = visibleByColumn[column];
 
               return (
                 <section
@@ -244,6 +295,11 @@ export default function BoardPage() {
       <CreateTaskDialog
         open={isCreateDialogOpen}
         onOpenChange={setIsCreateDialogOpen}
+        // Creating while narrowed to a project files it there, so the new card
+        // appears instead of being filtered out the moment it is made.
+        defaultProjectId={
+          projectFilter && projectFilter !== UNFILED_PROJECT ? projectFilter : null
+        }
         onTaskCreated={handleTaskCreated}
       />
     </div>

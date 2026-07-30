@@ -23,10 +23,16 @@ import {
   AssigneeCell,
   DueDateCell,
 } from "@/components/tasks/inline-fields";
+import { ProjectBadge } from "@/components/projects/project-badge";
+import {
+  ProjectFilter,
+  UNFILED_PROJECT,
+} from "@/components/projects/project-filter";
 import { notify } from "@/lib/notify";
+import { useProjects } from "@/lib/use-projects";
 import { cn } from "@/lib/utils";
 import type { Task, TaskPriority, TaskStatus } from "@/lib/types";
-import { PRIORITY_ITEMS, STATUS_ITEMS } from "@/lib/types";
+import { NO_PROJECT_LABEL, PRIORITY_ITEMS, STATUS_ITEMS } from "@/lib/types";
 
 /** Active work first, finished work last — the order you actually scan in. */
 const GROUPS: TaskStatus[] = [
@@ -51,10 +57,18 @@ type Filters = {
   status: TaskStatus | null;
   priority: TaskPriority | null;
   overdue: boolean;
+  /** A project id, or UNFILED for tasks in no project at all. */
+  project: string | null;
 };
 
+/** `?project=none` — shared with the filter control so both agree on the value. */
+const UNFILED = UNFILED_PROJECT;
+
 const isActive = (filters: Filters) =>
-  filters.status !== null || filters.priority !== null || filters.overdue;
+  filters.status !== null ||
+  filters.priority !== null ||
+  filters.overdue ||
+  filters.project !== null;
 
 /** Anything unrecognised in the query string is ignored rather than fatal. */
 function parseFilters(params: URLSearchParams): Filters {
@@ -65,6 +79,9 @@ function parseFilters(params: URLSearchParams): Filters {
     priority:
       priority && priority in PRIORITY_ITEMS ? (priority as TaskPriority) : null,
     overdue: params.get("due") === "overdue",
+    // Not checked against the real list: an id for a deleted project simply
+    // matches nothing, which is a better outcome than a crash or a silent reset.
+    project: params.get("project") || null,
   };
 }
 
@@ -75,6 +92,8 @@ function urlWithout(filters: Filters, drop: keyof Filters): string {
   if (drop !== "priority" && filters.priority)
     next.set("priority", filters.priority);
   if (drop !== "overdue" && filters.overdue) next.set("due", "overdue");
+  if (drop !== "project" && filters.project)
+    next.set("project", filters.project);
   const query = next.toString();
   return query ? `/list?${query}` : "/list";
 }
@@ -96,6 +115,8 @@ function ListView() {
     () => parseFilters(new URLSearchParams(searchParams.toString())),
     [searchParams]
   );
+  // Only for naming the active filter chip — the tasks carry their own project.
+  const { projects } = useProjects();
   const [tasks, setTasks] = useState<Task[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
@@ -146,6 +167,13 @@ function ListView() {
         if (!task.dueDate || task.status === "DONE") return false;
         if (new Date(task.dueDate).getTime() >= loadedAt) return false;
       }
+      if (filters.project) {
+        if (filters.project === UNFILED) {
+          if (task.projectId !== null) return false;
+        } else if (task.projectId !== filters.project) {
+          return false;
+        }
+      }
       return true;
     });
   }, [tasks, filters, loadedAt]);
@@ -175,6 +203,15 @@ function ListView() {
       label: `Priority: ${PRIORITY_ITEMS[filters.priority]}`,
     });
   if (filters.overdue) chips.push({ key: "overdue", label: "Overdue" });
+  if (filters.project) {
+    // A project that has since been deleted still gets a removable chip, so the
+    // filter is never a state you cannot see or get out of.
+    const name =
+      filters.project === UNFILED
+        ? NO_PROJECT_LABEL
+        : projects.find((project) => project.id === filters.project)?.name;
+    chips.push({ key: "project", label: `Project: ${name ?? "unknown"}` });
+  }
 
   /** Optimistic: the row changes instantly and reverts if the save fails. */
   const patch = useCallback(
@@ -242,6 +279,15 @@ function ListView() {
     setIsCreateDialogOpen(true);
   };
 
+  /** Keeps the project filter in the URL alongside whatever else is set. */
+  const setProjectFilter = (next: string | null) => {
+    const params = new URLSearchParams(searchParams.toString());
+    if (next) params.set("project", next);
+    else params.delete("project");
+    const query = params.toString();
+    router.push(query ? `/list?${query}` : "/list");
+  };
+
   if (isLoading) return <ListSkeleton />;
 
   return (
@@ -258,10 +304,13 @@ function ListView() {
                   } · click a row to open it, or edit any field in place`}
             </p>
           </div>
-          <Button onClick={() => openCreate()} className="gap-2">
-            <Plus className="h-4 w-4" />
-            New task
-          </Button>
+          <div className="flex shrink-0 items-center gap-2">
+            <ProjectFilter value={filters.project} onChange={setProjectFilter} />
+            <Button onClick={() => openCreate()} className="gap-2">
+              <Plus className="h-4 w-4" />
+              New task
+            </Button>
+          </div>
         </div>
 
         {chips.length > 0 && (
@@ -453,6 +502,13 @@ function ListView() {
                                     >
                                       {task.title}
                                     </span>
+                                    {task.project && (
+                                      <ProjectBadge
+                                        project={task.project}
+                                        showIcon={false}
+                                        className="max-w-[9rem] shrink-0"
+                                      />
+                                    )}
                                     {task.commentCount > 0 && (
                                       <span className="inline-flex shrink-0 items-center gap-0.5 text-[11px] text-muted-foreground">
                                         <MessageSquare className="h-3 w-3" />
@@ -525,6 +581,11 @@ function ListView() {
         open={isCreateDialogOpen}
         onOpenChange={setIsCreateDialogOpen}
         defaultStatus={createIn}
+        // Creating from a list filtered to one project keeps the new task in it,
+        // otherwise the task you just made vanishes from the view you made it in.
+        defaultProjectId={
+          filters.project && filters.project !== UNFILED ? filters.project : null
+        }
         onTaskCreated={(task) => setTasks((prev) => [task, ...prev])}
       />
     </div>

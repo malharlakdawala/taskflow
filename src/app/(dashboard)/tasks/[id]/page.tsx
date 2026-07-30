@@ -38,6 +38,7 @@ import {
 import { RichTextField } from "@/components/editor/rich-text-field";
 import { CommentList } from "@/components/tasks/comment-list";
 import { AssigneePicker } from "@/components/tasks/assignee-picker";
+import { ProjectPicker } from "@/components/projects/project-picker";
 import { UserChip } from "@/components/tasks/user-chip";
 import { StatusBadge, PriorityBadge, StatusDot } from "@/components/tasks/status-badge";
 import { cn } from "@/lib/utils";
@@ -609,6 +610,14 @@ export default function TaskDetailPage() {
                       ))}
                     </SelectContent>
                   </Select>
+                </div>
+
+                <div className="space-y-2">
+                  <label className={FIELD_LABEL}>Project</label>
+                  <ProjectPicker
+                    value={task.projectId}
+                    onChange={(projectId) => patch({ projectId })}
+                  />
                 </div>
 
                 <Separator />

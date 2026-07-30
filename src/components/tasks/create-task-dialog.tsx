@@ -22,6 +22,7 @@ import {
 import { Paperclip, Upload, X, Loader2 } from "lucide-react";
 import { TiptapEditor } from "@/components/editor/tiptap-editor";
 import { AssigneePicker } from "@/components/tasks/assignee-picker";
+import { ProjectPicker } from "@/components/projects/project-picker";
 import { notify } from "@/lib/notify";
 import type { Task, TaskStatus, TaskPriority } from "@/lib/types";
 import { STATUS_ITEMS, PRIORITY_ITEMS } from "@/lib/types";
@@ -40,6 +41,8 @@ interface CreateTaskDialogProps {
   onTaskCreated: (task: Task) => void;
   /** Preselects the status, so "Add task" inside a list section lands there. */
   defaultStatus?: TaskStatus;
+  /** Preselects the project, so creating from a filtered list stays in it. */
+  defaultProjectId?: string | null;
 }
 
 export function CreateTaskDialog({
@@ -47,6 +50,7 @@ export function CreateTaskDialog({
   onOpenChange,
   onTaskCreated,
   defaultStatus,
+  defaultProjectId,
 }: CreateTaskDialogProps) {
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
@@ -54,6 +58,9 @@ export function CreateTaskDialog({
   const [priority, setPriority] = useState<TaskPriority>("NONE");
   const [dueDate, setDueDate] = useState("");
   const [assigneeId, setAssigneeId] = useState<string | null>(null);
+  const [projectId, setProjectId] = useState<string | null>(
+    defaultProjectId ?? null
+  );
   const [attachments, setAttachments] = useState<PendingAttachment[]>([]);
   const [isUploading, setIsUploading] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
@@ -70,6 +77,16 @@ export function CreateTaskDialog({
     }
   }, [open, defaultStatus]);
 
+  // Same for the project, so opening this from a list already filtered to one
+  // creates the task inside it rather than dumping it in the unfiled pile.
+  const lastDefaultProject = useRef(defaultProjectId);
+  useEffect(() => {
+    if (open && lastDefaultProject.current !== defaultProjectId) {
+      lastDefaultProject.current = defaultProjectId;
+      setProjectId(defaultProjectId ?? null);
+    }
+  }, [open, defaultProjectId]);
+
   const reset = () => {
     setTitle("");
     setDescription("");
@@ -77,6 +94,7 @@ export function CreateTaskDialog({
     setPriority("NONE");
     setDueDate("");
     setAssigneeId(null);
+    setProjectId(defaultProjectId ?? null);
     setAttachments([]);
     setEditorKey((k) => k + 1);
   };
@@ -135,6 +153,7 @@ export function CreateTaskDialog({
           priority,
           dueDate: dueDate || null,
           assigneeId,
+          projectId,
         }),
       });
 
@@ -275,7 +294,11 @@ export function CreateTaskDialog({
               )}
             </div>
 
-            <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
+            <div className="grid grid-cols-2 gap-4 sm:grid-cols-3">
+              <div className="grid gap-2">
+                <Label>Project</Label>
+                <ProjectPicker value={projectId} onChange={setProjectId} />
+              </div>
               <div className="grid gap-2">
                 <Label>Status</Label>
                 <Select
