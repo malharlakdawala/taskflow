@@ -260,6 +260,7 @@ export function CreateTaskDialog({
                         variant="ghost"
                         size="icon"
                         className="h-6 w-6 shrink-0"
+                        aria-label={`Remove ${attachment.filename}`}
                         onClick={() =>
                           setAttachments((prev) =>
                             prev.filter((a) => a.url !== attachment.url)

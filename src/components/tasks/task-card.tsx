@@ -19,12 +19,17 @@ export function TaskCard({ task, isDragging }: TaskCardProps) {
   const isDone = task.status === "DONE";
 
   return (
-    <Link href={`/tasks/${task.id}`} className="block focus:outline-none">
+    <Link
+      href={`/tasks/${task.id}`}
+      className={cn(
+        "block rounded-xl focus-visible:outline-none",
+        "focus-visible:ring-2 focus-visible:ring-ring/40"
+      )}
+    >
       <article
         data-status={task.status}
         className={cn(
           "tone-rail lift group rounded-xl border bg-card p-3 pl-4",
-          "focus-within:ring-2 focus-within:ring-ring/40",
           isDragging && "rotate-1 shadow-xl ring-2 ring-primary/30"
         )}
       >
