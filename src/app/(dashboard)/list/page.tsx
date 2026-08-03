@@ -12,6 +12,7 @@ import {
   ListTodo,
   MessageSquare,
   Paperclip,
+  ArrowUpDown,
   X,
 } from "lucide-react";
 import { CreateTaskDialog } from "@/components/tasks/create-task-dialog";
@@ -28,11 +29,72 @@ import {
   ProjectFilter,
   UNFILED_PROJECT,
 } from "@/components/projects/project-filter";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { notify } from "@/lib/notify";
 import { useProjects } from "@/lib/use-projects";
 import { cn } from "@/lib/utils";
 import type { Task, TaskPriority, TaskStatus } from "@/lib/types";
 import { NO_PROJECT_LABEL, PRIORITY_ITEMS, STATUS_ITEMS } from "@/lib/types";
+
+/**
+ * How rows are ordered within each status group. "Manual" is the drag order
+ * from the board; everything else re-sorts on top of it so switching away
+ * and back loses nothing.
+ */
+type SortKey = "manual" | "priority-desc" | "priority-asc" | "due-asc" | "due-desc";
+
+const SORT_ITEMS: Record<SortKey, string> = {
+  manual: "Manual order",
+  "priority-desc": "Priority: High to low",
+  "priority-asc": "Priority: Low to high",
+  "due-asc": "Due date: Soonest first",
+  "due-desc": "Due date: Latest first",
+};
+
+const PRIORITY_RANK: Record<TaskPriority, number> = {
+  URGENT: 4,
+  HIGH: 3,
+  MEDIUM: 2,
+  LOW: 1,
+  NONE: 0,
+};
+
+function parseSort(params: URLSearchParams): SortKey {
+  const raw = params.get("sort");
+  return raw && raw in SORT_ITEMS ? (raw as SortKey) : "manual";
+}
+
+/** Ties fall back to manual order, so a sort never scrambles equal rows. */
+function compareTasks(sort: SortKey, a: Task, b: Task): number {
+  switch (sort) {
+    case "priority-desc":
+      return (
+        PRIORITY_RANK[b.priority] - PRIORITY_RANK[a.priority] || a.order - b.order
+      );
+    case "priority-asc":
+      return (
+        PRIORITY_RANK[a.priority] - PRIORITY_RANK[b.priority] || a.order - b.order
+      );
+    case "due-asc":
+    case "due-desc": {
+      // Tasks with no due date are never "soonest" or "latest" — they sink
+      // to the bottom regardless of direction.
+      if (!a.dueDate && !b.dueDate) return a.order - b.order;
+      if (!a.dueDate) return 1;
+      if (!b.dueDate) return -1;
+      const diff = new Date(a.dueDate).getTime() - new Date(b.dueDate).getTime();
+      return sort === "due-asc" ? diff : -diff;
+    }
+    default:
+      return a.order - b.order;
+  }
+}
 
 /** Active work first, finished work last — the order you actually scan in. */
 const GROUPS: TaskStatus[] = [
@@ -115,6 +177,10 @@ function ListView() {
     () => parseFilters(new URLSearchParams(searchParams.toString())),
     [searchParams]
   );
+  const sort = useMemo(
+    () => parseSort(new URLSearchParams(searchParams.toString())),
+    [searchParams]
+  );
   // Only for naming the active filter chip — the tasks carry their own project.
   const { projects } = useProjects();
   const [tasks, setTasks] = useState<Task[]>([]);
@@ -183,9 +249,9 @@ function ListView() {
       GROUPS.map((s) => [s, [] as Task[]])
     ) as Record<TaskStatus, Task[]>;
     for (const task of visible) map[task.status]?.push(task);
-    for (const status of GROUPS) map[status].sort((a, b) => a.order - b.order);
+    for (const status of GROUPS) map[status].sort((a, b) => compareTasks(sort, a, b));
     return map;
-  }, [visible]);
+  }, [visible, sort]);
 
   // Filtering down to one status and still showing four empty "Add a task to…"
   // sections reads as broken, so empty groups drop out while a filter is on.
@@ -288,6 +354,15 @@ function ListView() {
     router.push(query ? `/list?${query}` : "/list");
   };
 
+  /** Same pattern as the project filter — sort lives in the URL too. */
+  const setSort = (next: SortKey) => {
+    const params = new URLSearchParams(searchParams.toString());
+    if (next !== "manual") params.set("sort", next);
+    else params.delete("sort");
+    const query = params.toString();
+    router.push(query ? `/list?${query}` : "/list");
+  };
+
   if (isLoading) return <ListSkeleton />;
 
   return (
@@ -306,6 +381,23 @@ function ListView() {
           </div>
           <div className="flex shrink-0 items-center gap-2">
             <ProjectFilter value={filters.project} onChange={setProjectFilter} />
+            <Select
+              items={SORT_ITEMS}
+              value={sort}
+              onValueChange={(next) => setSort(next as SortKey)}
+            >
+              <SelectTrigger className="w-[210px]" aria-label="Sort tasks">
+                <ArrowUpDown className="h-3.5 w-3.5 text-muted-foreground" />
+                <SelectValue placeholder="Manual order" />
+              </SelectTrigger>
+              <SelectContent>
+                {Object.entries(SORT_ITEMS).map(([key, label]) => (
+                  <SelectItem key={key} value={key}>
+                    {label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
             <Button onClick={() => openCreate()} className="gap-2">
               <Plus className="h-4 w-4" />
               New task
