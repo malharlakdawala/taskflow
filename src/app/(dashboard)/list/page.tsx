@@ -105,9 +105,13 @@ const GROUPS: TaskStatus[] = [
   "DONE",
 ];
 
-/** Column widths shared by the header strip and every row. */
+/**
+ * Column widths shared by the header strip and every row. The fixed columns are
+ * kept to what their widest badge actually needs — every pixel they don't use
+ * goes to the title, which is the one column whose content nobody can guess.
+ */
 const GRID =
-  "grid grid-cols-[36px_minmax(0,1fr)_150px_140px_180px_120px] items-center gap-3";
+  "grid grid-cols-[36px_minmax(0,1fr)_128px_104px_152px_104px] items-center gap-3";
 
 /**
  * Filters come from the URL rather than component state, so the dashboard's
@@ -585,16 +589,23 @@ function ListView() {
                                   </div>
 
                                   <div className="flex min-w-0 items-center gap-2">
+                                    {/* Wraps to two lines before it gives up, and
+                                        carries the full text as a tooltip for the
+                                        rare title that still doesn't fit. */}
                                     <span
+                                      title={task.title}
                                       className={cn(
-                                        "truncate font-medium",
+                                        "line-clamp-2 min-w-0 break-words font-medium",
                                         task.status === "DONE" &&
                                           "text-muted-foreground line-through decoration-1"
                                       )}
                                     >
                                       {task.title}
                                     </span>
-                                    {task.project && (
+                                    {/* Filtered to one project, the badge on every
+                                        row says nothing the chip above doesn't —
+                                        so it gets out of the title's way. */}
+                                    {task.project && task.projectId !== filters.project && (
                                       <ProjectBadge
                                         project={task.project}
                                         showIcon={false}

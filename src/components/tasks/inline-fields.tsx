@@ -120,7 +120,7 @@ export function AssigneeCell({
   for (const member of members) items[member.id] = displayName(member);
 
   return (
-    <Stop>
+    <Stop className="min-w-0">
       <Select
         items={items}
         value={assignee?.id ?? UNASSIGNED}
@@ -129,9 +129,14 @@ export function AssigneeCell({
           if (next !== (assignee?.id ?? null)) onChange(next);
         }}
       >
-        <SelectTrigger className={ghostTrigger} aria-label="Change assignee">
+        <SelectTrigger
+          className={cn(ghostTrigger, "min-w-0 max-w-full")}
+          aria-label="Change assignee"
+        >
           {assignee ? (
-            <span className="flex items-center gap-2">
+            // min-w-0 at every level, or a long name pushes past the column
+            // instead of trimming itself.
+            <span className="flex min-w-0 items-center gap-2" title={displayName(assignee)}>
               <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-primary/12 text-[10px] font-bold text-primary ring-1 ring-primary/20">
                 {initialsFor(assignee)}
               </span>
