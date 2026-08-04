@@ -10,7 +10,23 @@ throwing database errors — see [Updating](README.md#updating) for the procedur
 
 ## [Unreleased]
 
-Nothing yet.
+### Added
+
+- **Invitations.** Settings → Members can now start membership rather than only
+  react to it. Paste in one address or twenty, choose Member or Admin, and each
+  one gets a link that lets them in without the approval queue — the invitation
+  *is* the approval. An address that already signed up is let straight in
+  instead, so "invite" and "approve" are the same button. Outstanding
+  invitations are listed with resend and revoke, and the link is shown for
+  copying, which is what makes this work on a deployment with no email
+  configured at all. Links carry a hashed 256-bit token, are good for a
+  fortnight, and only work for the address they were sent to.
+
+### Migrations
+
+One new migration. Apply it before deploying this version:
+
+- `20260804120000_taskflow_invitations.sql` — the `Invitation` table
 
 ## [0.1.0] — 2026-07-29
 

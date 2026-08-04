@@ -2,8 +2,15 @@ import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 import { missingSupabaseEnv, supabaseEnvError } from "@/lib/supabase/config";
 
-/** Routes reachable without a session. Everything else requires sign-in. */
-const PUBLIC_ROUTES = ["/login", "/signup", "/auth/callback"];
+/**
+ * Routes reachable without a session. Everything else requires sign-in.
+ *
+ * `/invite` has to be here: an invitation link is opened by someone who does
+ * not have an account yet, and bouncing them to a login screen they cannot use
+ * would make the whole feature a dead end. The page itself reveals nothing
+ * without a valid token.
+ */
+const PUBLIC_ROUTES = ["/login", "/signup", "/auth/callback", "/invite"];
 
 function isPublicRoute(pathname: string) {
   return PUBLIC_ROUTES.some(

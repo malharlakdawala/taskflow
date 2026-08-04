@@ -77,6 +77,21 @@ export async function PATCH(
     after(() =>
       notifyAccountApproved({ memberId: id, approverId: guard.user.id })
     );
+
+    // Someone invited by email who signed up the ordinary way instead, and got
+    // approved from the queue above. Their invitation is spent either way, and
+    // leaving it outstanding would keep a live link to an account that already
+    // has access.
+    after(() =>
+      prisma.invitation
+        .updateMany({
+          where: { email: member.email, acceptedAt: null },
+          data: { acceptedAt: new Date() },
+        })
+        .catch((error) =>
+          console.error("[members] could not close invitation:", error)
+        )
+    );
   }
 
   return NextResponse.json(member);

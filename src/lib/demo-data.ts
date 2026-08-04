@@ -118,6 +118,10 @@ export async function clearDemoContent(prisma: PrismaClient): Promise<void> {
   await prisma.project.deleteMany({});
   await prisma.notification.deleteMany({});
   await prisma.apiToken.deleteMany({});
+  // A demo publishes its admin password, so anyone can leave invitations behind
+  // in the settings screen. They send no mail there, but they should not
+  // accumulate either — and a stale link is one a reset ought to break.
+  await prisma.invitation.deleteMany({});
 }
 
 /**

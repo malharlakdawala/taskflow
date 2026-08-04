@@ -25,6 +25,46 @@ export interface Member extends User {
   assignedTaskCount: number;
 }
 
+/** An outstanding offer of membership, as the admin Settings screen sees it. */
+export interface Invitation {
+  id: string;
+  email: string;
+  role: UserRole;
+  expiresAt: string;
+  /** Decided by the server's clock — the one the accept endpoint compares to. */
+  expired: boolean;
+  acceptedAt: string | null;
+  createdAt: string;
+  /** Not a full `User` — the invitations query has no need for an avatar. */
+  invitedBy: Pick<User, "id" | "name" | "email"> | null;
+}
+
+/**
+ * What became of one address in an invite request.
+ *
+ * `added` is an address that already had an account — a sign-up waiting in the
+ * pending queue, or someone whose access was revoked — so there is nothing to
+ * invite and they are simply let in. `invited` and `resent` both carry a link,
+ * which is the only time it is ever available: the server keeps a hash.
+ */
+export type InviteOutcome =
+  | "invited"
+  | "resent"
+  | "added"
+  | "already-member"
+  | "failed";
+
+export interface InviteResult {
+  email: string;
+  outcome: InviteOutcome;
+  /** Present for `invited` and `resent`. Shown so it can be sent by hand. */
+  inviteUrl?: string;
+  /** False when email is unconfigured, on a demo instance, or Brevo refused. */
+  emailed?: boolean;
+  /** Why, for `failed`. */
+  error?: string;
+}
+
 /**
  * The eight palette keys a project may carry, and the only values the API
  * accepts for `color`. They are rendered into a `data-project-color` attribute

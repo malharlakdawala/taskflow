@@ -44,11 +44,14 @@ function layout({
   heading,
   body,
   action,
+  footer = "You are receiving this because you are a member of this TaskFlow workspace.",
 }: {
   preheader: string;
   heading: string;
   body: string;
   action?: { label: string; url: string };
+  /** Overridden by the invitation, which goes to someone who is not one yet. */
+  footer?: string;
 }): string {
   return `<!doctype html>
 <html lang="en">
@@ -87,7 +90,7 @@ function layout({
         }
         <tr>
           <td style="padding:16px 28px 22px;border-top:1px solid ${BORDER};font-size:12px;line-height:1.6;color:${MUTED};">
-            You are receiving this because you are a member of this TaskFlow workspace.
+            ${escape(footer)}
           </td>
         </tr>
       </table>
@@ -228,6 +231,58 @@ export function commentAddedEmail({
       commentText,
       "",
       taskUrl,
+    ].join("\n"),
+  };
+}
+
+/**
+ * An invitation to a workspace the recipient has no account on yet.
+ *
+ * Unlike every other message here this one goes to someone who has never heard
+ * of TaskFlow, so it names the person inviting them and says what the thing is
+ * — a bare "you have been invited" from an unknown product reads as spam.
+ */
+export function workspaceInviteEmail({
+  inviteUrl,
+  inviterName,
+  inviterEmail,
+  asAdmin,
+  expiresLabel,
+}: {
+  inviteUrl: string;
+  inviterName: string;
+  inviterEmail: string;
+  /** Admins can manage members, so it is worth saying up front. */
+  asAdmin: boolean;
+  expiresLabel: string;
+}): BuiltEmail {
+  const heading = `${inviterName} invited you to TaskFlow`;
+
+  return {
+    subject: heading,
+    html: layout({
+      preheader: `Set up your account and join ${inviterName}'s workspace.`,
+      heading,
+      body:
+        `<p style="margin:0 0 10px;"><strong>${escape(inviterName)}</strong> (${escape(inviterEmail)}) ` +
+        `has invited you to their TaskFlow workspace — a shared board for the team's tasks.</p>` +
+        `<p style="margin:0 0 10px;">Open the link below to set a password and go straight in${
+          asAdmin ? " as an administrator" : ""
+        }. No approval needed; the invitation is already the approval.</p>` +
+        `<p style="margin:0;color:${MUTED};">The link works once and expires ${escape(expiresLabel)}. ` +
+        `If you weren't expecting this, you can ignore it.</p>`,
+      action: { label: "Accept invitation", url: inviteUrl },
+      footer: `You are receiving this because ${inviterEmail} entered your address in TaskFlow. Nobody can see your tasks unless you accept.`,
+    }),
+    text: [
+      `${inviterName} (${inviterEmail}) has invited you to their TaskFlow workspace,`,
+      "a shared board for the team's tasks.",
+      "",
+      `Open this link to set a password and join${asAdmin ? " as an administrator" : ""}:`,
+      inviteUrl,
+      "",
+      `The link works once and expires ${expiresLabel}. If you weren't expecting`,
+      "this, you can ignore it.",
     ].join("\n"),
   };
 }

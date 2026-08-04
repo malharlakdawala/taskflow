@@ -89,10 +89,35 @@ model User {
   notifications   Notification[] @relation("NotificationRecipient")
   actedOn         Notification[] @relation("NotificationActor")
   apiTokens       ApiToken[]
+  invitationsSent Invitation[]   @relation("InvitationInvitedBy")
   createdAt       DateTime       @default(now()) @db.Timestamptz(6)
   updatedAt       DateTime       @updatedAt @db.Timestamptz(6)
 
   @@index([status], map: "User_status_idx")
+}
+
+/// An open offer of membership, addressed to an email that has no account yet.
+///
+/// Only the token's hash is stored, so the plaintext exists in exactly one
+/// place: the invitation email. Accepting requires presenting it — see the
+/// migration for why matching on the email address alone is not enough.
+///
+/// `email` is written lower-cased by the API, which is what makes the unique
+/// index case-insensitive in practice. Re-inviting an address updates this row
+/// and issues a new token rather than creating a second one.
+model Invitation {
+  id          String    @id @default(uuid()) @db.Uuid
+  email       String    @unique
+  role        UserRole  @default(MEMBER)
+  tokenHash   String    @unique
+  invitedById String?   @db.Uuid
+  invitedBy   User?     @relation("InvitationInvitedBy", fields: [invitedById], references: [id], onDelete: SetNull)
+  expiresAt   DateTime  @db.Timestamptz(6)
+  /// Set when the invited person claims it. Kept as a record of how a member
+  /// came to be one.
+  acceptedAt  DateTime? @db.Timestamptz(6)
+  createdAt   DateTime  @default(now()) @db.Timestamptz(6)
+  updatedAt   DateTime  @updatedAt @db.Timestamptz(6)
 }
 
 /// A named grouping for tasks. Membership is optional — a task with no project

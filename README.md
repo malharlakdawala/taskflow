@@ -280,6 +280,22 @@ Admins get a **Settings** page to approve, decline, revoke, and promote members.
 Two safeguards: you cannot change your own role or status, and the last active
 admin cannot be demoted or removed.
 
+Membership does not have to start with the other person, though. **Settings →
+Members → Invite people** takes one address or a pasted list of them, and sends
+each a link that lets them in with no approval step — an invitation *is* the
+approval. Paste in an address that has already signed up and there is nothing to
+invite, so that person is simply let in; the same button covers both. Sending as
+**Admin** is a choice at the point of inviting.
+
+An invitation link carries a 256-bit token of which only the SHA-256 hash is
+stored, expires after a fortnight, and works only for the address it was
+addressed to — accepting compares the signed-in account's email against the
+invitation, so a forwarded link gets a colleague nowhere. Because the link is
+the thing that grants access, the settings screen shows it for copying: **with
+no email configured, invitations still work** — you pass the link on yourself.
+Nothing is emailed from a demo instance, for the same reason its admin password
+is public.
+
 ## Performance Notes
 
 This was built against a database in `ap-northeast-1` (Tokyo), where each
@@ -316,6 +332,11 @@ their [regions docs](https://vercel.com/docs/edge-network/regions).
   admin approves them, and the server layout refuses to render task data to
   them. You can close sign-ups entirely in Supabase → Authentication →
   Providers if you'd rather not field the requests.
+- **Invitations are claimed with the token, never with the email address.** A
+  session is required to accept, the session's address must be the invited one,
+  and the token proves the holder received the mail. Matching on the address
+  alone would mean that on a project with email confirmation switched off,
+  anyone could type a colleague's address into the sign-up form and be let in.
 - API routes validate every payload with Zod and write only allow-listed
   columns.
 - MCP personal access tokens are stored as SHA-256 hashes and scoped to one

@@ -8,8 +8,10 @@ import {
   dueSoonEmail,
   taskAssignedEmail,
   tasksAssignedEmail,
+  workspaceInviteEmail,
   type EmailBlock,
 } from "@/lib/email/templates";
+import { isDemoMode } from "@/lib/demo";
 import {
   clip,
   commentPath,
@@ -579,6 +581,60 @@ export async function notifyCommentAdded({
 /* -------------------------------------------------------------------------- */
 /* Membership                                                                  */
 /* -------------------------------------------------------------------------- */
+
+/**
+ * Mails an invitation link to someone who has no account yet.
+ *
+ * The one send in this file that is awaited rather than fired from `after()`:
+ * there is no in-app feed to fall back on for a person who cannot sign in, so
+ * whether the mail left is the whole result of the operation. The caller shows
+ * the admin a copyable link when this returns false, which is also what makes
+ * invitations work on a deployment with no email configured at all.
+ *
+ * Not sent from a demo instance. The login screen there publishes the admin
+ * password, so an open invite form would be a mail relay for anyone who walks
+ * past. The invitation is still created, and the link still works.
+ */
+export async function sendWorkspaceInvite({
+  email,
+  inviteUrl,
+  role,
+  expiresAt,
+  inviterId,
+}: {
+  email: string;
+  inviteUrl: string;
+  role: "ADMIN" | "MEMBER";
+  expiresAt: Date;
+  inviterId: string;
+}): Promise<boolean> {
+  if (isDemoMode || !isEmailConfigured()) return false;
+
+  try {
+    const inviter = await prisma.user.findUnique({
+      where: { id: inviterId },
+      select: { name: true, email: true },
+    });
+    if (!inviter) return false;
+
+    const built = workspaceInviteEmail({
+      inviteUrl,
+      inviterName: nameFor(inviter),
+      inviterEmail: inviter.email,
+      asAdmin: role === "ADMIN",
+      expiresLabel: `on ${formatDate(expiresAt)}`,
+    });
+
+    return await sendEmail({
+      to: [{ email }],
+      ...built,
+      tags: ["workspace-invite"],
+    });
+  } catch (error) {
+    console.error("[notify] invitation failed:", error);
+    return false;
+  }
+}
 
 /** Tells a newly approved member they can sign in. */
 export async function notifyAccountApproved({

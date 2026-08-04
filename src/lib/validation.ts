@@ -129,6 +129,31 @@ export const updateMemberSchema = z
     message: "No fields to update",
   });
 
+/**
+ * Inviting people. Several addresses at once, because onboarding a team is one
+ * job rather than five, and each is reported on independently — an address that
+ * already has an account is a different outcome, not a failure of the request.
+ *
+ * The cap is what keeps the invite form from being a mail relay.
+ */
+export const MAX_INVITES_PER_REQUEST = 20;
+
+export const createInvitationsSchema = z.object({
+  emails: z
+    .array(z.email("That doesn't look like an email address"))
+    .min(1, "Enter at least one email address")
+    .max(
+      MAX_INVITES_PER_REQUEST,
+      `${MAX_INVITES_PER_REQUEST} addresses at a time is the limit`
+    ),
+  role: z.enum(["ADMIN", "MEMBER"]).default("MEMBER"),
+});
+
+/** The token comes from the link, so it is opaque — length is all we can check. */
+export const acceptInvitationSchema = z.object({
+  token: z.string().min(20).max(200),
+});
+
 export const createCommentSchema = z.object({
   content: z.string().trim().min(1, "Comment cannot be empty").max(100_000),
 });
