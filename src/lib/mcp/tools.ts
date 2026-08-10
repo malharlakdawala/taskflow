@@ -297,6 +297,57 @@ const listTasks: McpTool = {
   },
 };
 
+const searchTasks: McpTool = {
+  name: "search_tasks",
+  description:
+    "Search task titles, newest first, optionally filtered by status or priority.",
+  inputSchema: object(
+    {
+      query: {
+        type: "string",
+        minLength: 1,
+        maxLength: 200,
+        description: "Case-insensitive text to find in task titles",
+      },
+      status: enumOf(STATUSES, "Only tasks with this status"),
+      priority: enumOf(PRIORITIES, "Only tasks with this priority"),
+      limit: {
+        type: "number",
+        description: "How many to return (1-100, default 20)",
+      },
+    },
+    ["query"]
+  ),
+  schema: z.object({
+    query: z.string().trim().min(1).max(200),
+    status: z.enum(STATUSES).optional(),
+    priority: z.enum(PRIORITIES).optional(),
+    limit: z.number().int().min(1).max(100).optional(),
+  }),
+  async run(args) {
+    const input = args as {
+      query: string;
+      status?: (typeof STATUSES)[number];
+      priority?: (typeof PRIORITIES)[number];
+      limit?: number;
+    };
+
+    const tasks = await prisma.task.findMany({
+      where: {
+        title: { contains: input.query, mode: "insensitive" },
+        ...(input.status && { status: input.status }),
+        ...(input.priority && { priority: input.priority }),
+      },
+      select: TASK_SUMMARY,
+      relationLoadStrategy: "join",
+      orderBy: { createdAt: "desc" },
+      take: input.limit ?? 20,
+    });
+
+    return { count: tasks.length, tasks };
+  },
+};
+
 const getTask: McpTool = {
   name: "get_task",
   description:
@@ -692,6 +743,7 @@ const createProject: McpTool = {
 
 export const TOOLS: McpTool[] = [
   listTasks,
+  searchTasks,
   getTask,
   createTask,
   updateTask,

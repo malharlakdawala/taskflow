@@ -370,8 +370,19 @@ notifications all apply — a task assigned from a terminal reaches its new owne
 exactly as one assigned from the board does. Only a SHA-256 hash of the token
 is stored; the plaintext is shown once, at creation, and revoking is immediate.
 
-Tools: `list_tasks`, `get_task`, `create_task`, `update_task`, `move_task`,
-`delete_task`, `add_comment`, `list_members`.
+| Hosted tool | Description |
+|-------------|-------------|
+| `list_tasks` | List tasks with status, priority, assignee and project filters |
+| `search_tasks` | Search task titles, with optional status and priority filters |
+| `get_task` | Get one task with its comments and attachments |
+| `create_task` | Create and assign a task |
+| `update_task` | Update a task's fields |
+| `move_task` | Change only a task's status |
+| `delete_task` | Delete a task |
+| `add_comment` | Comment on a task |
+| `list_members` | List approved members available for assignment |
+| `list_projects` | List projects and task counts |
+| `create_project` | Create a project |
 
 The transport is Streamable HTTP in JSON mode — one JSON-RPC request per POST,
 no SSE stream and no session id, because every call is a single database
