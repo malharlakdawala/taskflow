@@ -127,6 +127,46 @@ export interface Task {
   updatedAt: string;
 }
 
+/**
+ * Where a search hit its keywords. Rendered as the reason a row is in the
+ * results, so a task matched only by a comment doesn't look like a mistake.
+ */
+export interface SearchMatch {
+  inTitle: boolean;
+  inDescription: boolean;
+  inComment: boolean;
+  inProject: boolean;
+  inAssignee: boolean;
+}
+
+/**
+ * A task as the search results render it: enough to recognise the task and to
+ * see why it matched, without the comment and attachment payloads a list view
+ * doesn't carry either.
+ */
+export interface SearchResult {
+  id: string;
+  title: string;
+  status: TaskStatus;
+  priority: TaskPriority;
+  dueDate: string | null;
+  updatedAt: string;
+  project: ProjectSummary | null;
+  assignee: User | null;
+  /** Plain-text extract around the first keyword. Null when there is no body. */
+  snippet: string | null;
+  snippetSource: "description" | "comment" | null;
+  matched: SearchMatch;
+}
+
+export interface SearchResponse {
+  /** What was actually searched, after the endpoint trimmed and capped it. */
+  query: string;
+  results: SearchResult[];
+  /** True when the result cap hid further matches. */
+  hasMore: boolean;
+}
+
 export type NotificationType =
   | "TASK_ASSIGNED"
   | "TASK_UPDATED"

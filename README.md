@@ -79,6 +79,12 @@ for any picture in a description, comment or attachment.
   assignee and due date in a single request. Filters live in the URL
   (`/list?status=IN_PROGRESS`, `?priority=URGENT`, `?due=overdue`), so a
   filtered view can be linked to and shared
+- **Search** — `⌘K` (`Ctrl K`) from any screen, or the field at the top of the
+  sidebar. Keywords are matched against task titles, descriptions, comments,
+  project names and assignees, across every status — finished work included.
+  Results say where the keywords were found and show the surrounding sentence,
+  `"quoted phrases"` match exactly, and any search can be opened in the list
+  view as `/list?q=…` to sort, filter or bulk-edit the matches
 - **Assignees** — Pick an assignee on create or from the task detail view
 - **Rich Text Editor** — Tiptap with headings, lists, code blocks, links, tables,
   and image upload by file picker, paste, or drag-and-drop
@@ -475,6 +481,7 @@ src/
 ├── components/
 │   ├── editor/          # Tiptap rich text editor
 │   ├── notifications/   # Sidebar bell + feed row
+│   ├── search/          # ⌘K search palette
 │   ├── tasks/           # Task cards, creation dialog, comments
 │   ├── ui/              # shadcn/ui components
 │   └── sidebar.tsx      # Navigation sidebar
@@ -484,6 +491,7 @@ src/
 │   ├── mcp/             # Personal access tokens + the hosted MCP tools
 │   ├── notifications/   # Who gets told what, over which channel
 │   ├── prisma.ts        # Prisma client singleton (taskflow schema)
+│   ├── search/          # Keyword parsing + the cross-task search query
 │   ├── storage.ts       # Supabase Storage upload helpers
 │   ├── supabase/        # Supabase clients (browser, server, session)
 │   ├── tasks.ts         # Shared query shape + serialisation

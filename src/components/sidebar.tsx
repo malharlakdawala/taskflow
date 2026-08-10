@@ -16,6 +16,7 @@ import {
   Zap,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { GlobalSearch } from "@/components/search/global-search";
 import { NotificationBell } from "@/components/notifications/notification-bell";
 import { ProjectDot } from "@/components/projects/project-badge";
 import { useProjects } from "@/lib/use-projects";
@@ -76,6 +77,12 @@ export function Sidebar({ user }: { user: SessionUser }) {
         </Link>
 
         <NotificationBell />
+      </div>
+
+      {/* Above the nav, not in it: search is how you reach a specific task,
+          which is a different job from moving between views. */}
+      <div className="shrink-0 border-b px-3 py-2.5">
+        <GlobalSearch />
       </div>
 
       <nav className="flex-1 space-y-0.5 overflow-y-auto p-3">

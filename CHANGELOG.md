@@ -12,6 +12,16 @@ throwing database errors — see [Updating](README.md#updating) for the procedur
 
 ### Added
 
+- **Search.** `⌘K` from anywhere, or the field at the top of the sidebar. One
+  keyword search over every task in the workspace — titles, descriptions,
+  comments, project names and assignees — and across every status, so finished
+  work is findable rather than buried. Each result shows the sentence the
+  keywords were found in and says whether that was the description or a comment;
+  `"quoted phrases"` match exactly. Title matches are ranked above body matches
+  in the database, before the result limit, so the obvious answer is never
+  crowded out by a task that merely mentions the word. Any search opens in the
+  list view as `/list?q=…` for sorting, further filtering or bulk edits. No
+  migration: it queries the columns that already exist.
 - **Invitations.** Settings → Members can now start membership rather than only
   react to it. Paste in one address or twenty, choose Member or Admin, and each
   one gets a link that lets them in without the approval queue — the invitation

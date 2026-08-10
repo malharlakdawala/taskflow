@@ -38,7 +38,8 @@ import {
 } from "@/components/ui/select";
 import { notify } from "@/lib/notify";
 import { useProjects } from "@/lib/use-projects";
-import { cn } from "@/lib/utils";
+import { matchesAllTerms, parseSearchTerms } from "@/lib/search/terms";
+import { cn, displayName, toPlainText } from "@/lib/utils";
 import type { Task, TaskPriority, TaskStatus } from "@/lib/types";
 import { NO_PROJECT_LABEL, PRIORITY_ITEMS, STATUS_ITEMS } from "@/lib/types";
 
@@ -125,6 +126,8 @@ type Filters = {
   overdue: boolean;
   /** A project id, or UNFILED for tasks in no project at all. */
   project: string | null;
+  /** Keywords, as handed over by the global search palette. */
+  q: string | null;
 };
 
 /** `?project=none` — shared with the filter control so both agree on the value. */
@@ -134,7 +137,26 @@ const isActive = (filters: Filters) =>
   filters.status !== null ||
   filters.priority !== null ||
   filters.overdue ||
-  filters.project !== null;
+  filters.project !== null ||
+  filters.q !== null;
+
+/**
+ * What a keyword is matched against here: everything the rows already hold.
+ *
+ * Narrower than the search palette, which also reads comments — those are not
+ * loaded by this view, and fetching every comment to filter a list would undo
+ * the reason they were dropped from the payload. So a task the palette found by
+ * a comment can be missing from this list; the palette is where that search
+ * lives, and this is the filtered, sortable, bulk-editable view of the rest.
+ */
+function searchableText(task: Task): string {
+  return [
+    task.title,
+    toPlainText(task.description),
+    task.project?.name ?? "",
+    task.assignee ? `${displayName(task.assignee)} ${task.assignee.email}` : "",
+  ].join(" ");
+}
 
 /** Anything unrecognised in the query string is ignored rather than fatal. */
 function parseFilters(params: URLSearchParams): Filters {
@@ -148,6 +170,7 @@ function parseFilters(params: URLSearchParams): Filters {
     // Not checked against the real list: an id for a deleted project simply
     // matches nothing, which is a better outcome than a crash or a silent reset.
     project: params.get("project") || null,
+    q: params.get("q")?.trim() || null,
   };
 }
 
@@ -160,6 +183,7 @@ function urlWithout(filters: Filters, drop: keyof Filters): string {
   if (drop !== "overdue" && filters.overdue) next.set("due", "overdue");
   if (drop !== "project" && filters.project)
     next.set("project", filters.project);
+  if (drop !== "q" && filters.q) next.set("q", filters.q);
   const query = next.toString();
   return query ? `/list?${query}` : "/list";
 }
@@ -226,10 +250,17 @@ function ListView() {
     };
   }, []);
 
+  const terms = useMemo(
+    () => (filters.q ? parseSearchTerms(filters.q) : []),
+    [filters.q]
+  );
+
   const visible = useMemo(() => {
     if (!isActive(filters)) return tasks;
 
     return tasks.filter((task) => {
+      if (terms.length > 0 && !matchesAllTerms(searchableText(task), terms))
+        return false;
       if (filters.status && task.status !== filters.status) return false;
       if (filters.priority && task.priority !== filters.priority) return false;
       if (filters.overdue) {
@@ -246,7 +277,7 @@ function ListView() {
       }
       return true;
     });
-  }, [tasks, filters, loadedAt]);
+  }, [tasks, filters, terms, loadedAt]);
 
   const grouped = useMemo(() => {
     const map = Object.fromEntries(
@@ -265,6 +296,9 @@ function ListView() {
   );
 
   const chips: Array<{ key: keyof Filters; label: string }> = [];
+  // Keywords first: when you arrive from the search palette, that is the filter
+  // you are most likely to want to drop again.
+  if (filters.q) chips.push({ key: "q", label: `Matching “${filters.q}”` });
   if (filters.status)
     chips.push({ key: "status", label: `Status: ${STATUS_ITEMS[filters.status]}` });
   if (filters.priority)
@@ -454,6 +488,16 @@ function ListView() {
                 <p className="max-w-xs text-sm text-muted-foreground">
                   {tasks.length} {tasks.length === 1 ? "task" : "tasks"} in total,
                   none of them fit.
+                  {filters.q && (
+                    <>
+                      {" "}
+                      Comments are not searched here — press{" "}
+                      <kbd className="rounded border bg-muted px-1 py-0.5 text-[10px] font-medium">
+                        ⌘K
+                      </kbd>{" "}
+                      to search those too.
+                    </>
+                  )}
                 </p>
                 <Button
                   size="sm"
