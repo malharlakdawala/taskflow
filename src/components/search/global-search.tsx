@@ -1,6 +1,12 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useState,
+  useSyncExternalStore,
+} from "react";
 import { useRouter } from "next/navigation";
 import {
   ArrowRight,
@@ -51,30 +57,69 @@ const DEBOUNCE_MS = 180;
 /** Projects are already in memory; more than a few would bury the tasks. */
 const MAX_PROJECT_MATCHES = 4;
 
+/**
+ * The platform's own modifier key, read through useSyncExternalStore rather than
+ * an effect: `navigator` does not exist while rendering on the server, and this
+ * is the one way to render a browser-only value without either a hydration
+ * mismatch or a state write on mount. It never changes, so there is nothing to
+ * subscribe to.
+ */
+const noSubscription = () => () => {};
+const isMacBrowser = () => /mac|iphone|ipad/i.test(navigator.userAgent);
+/** The server has no platform to speak of; the client corrects it on hydration. */
+const isMacServer = () => false;
+
+/** One answer from the search endpoint, tagged with the query that asked for it. */
+interface Answer {
+  query: string;
+  results: SearchResult[];
+  hasMore: boolean;
+  error: string | null;
+}
+
 export function GlobalSearch() {
   const router = useRouter();
   const { projects } = useProjects();
 
   const [isOpen, setIsOpen] = useState(false);
   const [query, setQuery] = useState("");
-  const [results, setResults] = useState<SearchResult[]>([]);
-  const [hasMore, setHasMore] = useState(false);
-  const [isSearching, setIsSearching] = useState(false);
-  const [error, setError] = useState<string | null>(null);
   /**
-   * Resolved after mount: the modifier differs by platform, and rendering a
-   * guess on the server would be a hydration mismatch.
+   * The newest answer from the endpoint, whatever it was asked. Everything the
+   * palette shows is derived from it and the query as it now stands, so nothing
+   * has to be reset when the query changes — a search in flight simply has no
+   * matching answer yet.
    */
-  const [shortcut, setShortcut] = useState<string | null>(null);
+  const [answer, setAnswer] = useState<Answer | null>(null);
+
+  const isMac = useSyncExternalStore(noSubscription, isMacBrowser, isMacServer);
+  const shortcut = isMac ? "⌘K" : "Ctrl K";
 
   const trimmed = query.trim();
   const terms = useMemo(() => parseSearchTerms(trimmed), [trimmed]);
   const isTooShort = trimmed.length < MIN_SEARCH_LENGTH;
 
-  useEffect(() => {
-    setShortcut(
-      /mac|iphone|ipad/i.test(navigator.userAgent) ? "⌘K" : "Ctrl K"
-    );
+  /** Only an answer to the question currently being asked counts as one. */
+  const current = !isTooShort && answer?.query === trimmed ? answer : null;
+  /** Keep the last results on screen while the next ones are on their way. */
+  const stale = !isTooShort && current === null ? answer : null;
+  const shown = current ?? stale;
+  const results = shown?.results ?? [];
+  const hasMore = shown?.hasMore ?? false;
+  const error = current?.error ?? null;
+  const isSearching = !isTooShort && current === null;
+
+  /**
+   * Closing clears the query and the answer with it, so the palette always
+   * opens on a blank field. Reopening onto an old query would mean showing
+   * results fetched at some earlier point, which is the one kind of staleness a
+   * search cannot afford.
+   */
+  const setOpen = useCallback((open: boolean) => {
+    setIsOpen(open);
+    if (!open) {
+      setQuery("");
+      setAnswer(null);
+    }
   }, []);
 
   useEffect(() => {
@@ -83,28 +128,24 @@ export function GlobalSearch() {
         // Chrome's own address-bar shortcut, taken over deliberately: inside an
         // app, ⌘K means "find something in here".
         event.preventDefault();
-        setIsOpen((open) => !open);
+        setOpen(!isOpen);
       }
     };
 
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, []);
+    // isOpen is a dependency so the toggle reads the current state rather than
+    // whatever it was when the listener was first attached.
+  }, [isOpen, setOpen]);
 
   useEffect(() => {
-    if (!isOpen) return;
-
-    if (isTooShort) {
-      setResults([]);
-      setHasMore(false);
-      setIsSearching(false);
-      setError(null);
-      return;
-    }
+    if (!isOpen || isTooShort || current !== null) return;
 
     const controller = new AbortController();
-    setIsSearching(true);
 
+    // Fired from the timer rather than from the effect body, which is both the
+    // debounce — a fast typist makes one request, not one per keystroke — and
+    // the reason no state is written while the effect itself runs.
     const timer = setTimeout(async () => {
       try {
         const response = await fetch(
@@ -114,19 +155,23 @@ export function GlobalSearch() {
         if (!response.ok) throw new Error("Search failed");
 
         const payload: SearchResponse = await response.json();
-        setResults(payload.results);
-        setHasMore(payload.hasMore);
-        setError(null);
+        setAnswer({
+          query: trimmed,
+          results: payload.results,
+          hasMore: payload.hasMore,
+          error: null,
+        });
       } catch (failure) {
         // An aborted request is the previous keystroke being tidied up, not a
         // failure worth showing anyone.
         if (controller.signal.aborted) return;
         console.error("Search failed:", failure);
-        setResults([]);
-        setHasMore(false);
-        setError("Could not search just now");
-      } finally {
-        if (!controller.signal.aborted) setIsSearching(false);
+        setAnswer({
+          query: trimmed,
+          results: [],
+          hasMore: false,
+          error: "Could not search just now",
+        });
       }
     }, DEBOUNCE_MS);
 
@@ -134,7 +179,7 @@ export function GlobalSearch() {
       controller.abort();
       clearTimeout(timer);
     };
-  }, [isOpen, trimmed, isTooShort]);
+  }, [isOpen, trimmed, isTooShort, current]);
 
   /** Project names are in memory already, so those matches cost nothing. */
   const projectMatches = useMemo(() => {
@@ -146,10 +191,10 @@ export function GlobalSearch() {
 
   const go = useCallback(
     (href: string) => {
-      setIsOpen(false);
+      setOpen(false);
       router.push(href);
     },
-    [router]
+    [router, setOpen]
   );
 
   const isEmpty =
@@ -159,7 +204,7 @@ export function GlobalSearch() {
     <>
       <button
         type="button"
-        onClick={() => setIsOpen(true)}
+        onClick={() => setOpen(true)}
         className={cn(
           "flex h-9 w-full items-center gap-2.5 rounded-lg border border-input/60 bg-background/50 px-2.5",
           "text-sm text-muted-foreground transition-colors",
@@ -169,16 +214,14 @@ export function GlobalSearch() {
       >
         <Search className="h-4 w-4 shrink-0" />
         <span className="truncate">Search tasks…</span>
-        {shortcut && (
-          <kbd className="ml-auto shrink-0 rounded border bg-muted px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground">
-            {shortcut}
-          </kbd>
-        )}
+        <kbd className="ml-auto shrink-0 rounded border bg-muted px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground">
+          {shortcut}
+        </kbd>
       </button>
 
       <CommandDialog
         open={isOpen}
-        onOpenChange={setIsOpen}
+        onOpenChange={setOpen}
         title="Search tasks"
         description="Find any task by keyword — titles, descriptions, comments, projects and people, in every status including done."
         className="top-[12vh] sm:max-w-2xl"
