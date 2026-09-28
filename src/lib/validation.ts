@@ -34,10 +34,13 @@ export const createTaskSchema = z.object({
   description: richTextSchema.nullish(),
   status: statusSchema.optional(),
   priority: prioritySchema.optional(),
+  startDate: dueDateSchema.optional(),
   dueDate: dueDateSchema.optional(),
   assigneeId: z.uuid().nullish(),
   /** Null files the task nowhere, which is the default. */
   projectId: z.uuid().nullish(),
+  /** Set to file this task as a subtask of another. Null (the default) is top-level. */
+  parentId: z.uuid().nullish(),
 });
 
 /**
@@ -50,10 +53,13 @@ export const updateTaskSchema = z
     description: richTextSchema.nullable(),
     status: statusSchema,
     priority: prioritySchema,
+    startDate: dueDateSchema,
     dueDate: dueDateSchema,
     assigneeId: z.uuid().nullable(),
     projectId: z.uuid().nullable(),
     order: z.number().finite(),
+    /** Null promotes a subtask back to top-level. */
+    parentId: z.uuid().nullable(),
   })
   .partial()
   .refine((data) => Object.keys(data).length > 0, {
@@ -120,6 +126,17 @@ export const updateProjectSchema = z
     message: "No fields to update",
   });
 
+const projectRoleSchema = z.enum(["VIEWER", "EDITOR"]);
+
+export const addProjectMemberSchema = z.object({
+  email: z.email("That doesn't look like an email address"),
+  role: projectRoleSchema.default("EDITOR"),
+});
+
+export const updateProjectMemberSchema = z.object({
+  role: projectRoleSchema,
+});
+
 export const updateMemberSchema = z
   .object({
     role: z.enum(["ADMIN", "MEMBER"]).optional(),
@@ -153,6 +170,18 @@ export const createInvitationsSchema = z.object({
 export const acceptInvitationSchema = z.object({
   token: z.string().min(20).max(200),
 });
+
+/** Settings → Notifications. Each toggle gates the emailed copy of that event only. */
+export const updateEmailPreferencesSchema = z
+  .object({
+    emailOnAssigned: z.boolean(),
+    emailOnComment: z.boolean(),
+    emailOnDueSoon: z.boolean(),
+  })
+  .partial()
+  .refine((data) => Object.keys(data).length > 0, {
+    message: "No fields to update",
+  });
 
 export const createCommentSchema = z.object({
   content: z.string().trim().min(1, "Comment cannot be empty").max(100_000),

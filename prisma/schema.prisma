@@ -72,26 +72,34 @@ enum NotificationType {
 /// `id` is deliberately the same uuid as the Supabase auth user id, so a session
 /// user id can be used directly as a foreign key.
 model User {
-  id              String         @id @db.Uuid
-  email           String         @unique
+  id              String           @id @db.Uuid
+  email           String           @unique
   name            String?
   avatarUrl       String?
-  role            UserRole       @default(MEMBER)
-  status          UserStatus     @default(PENDING)
-  approvedAt      DateTime?      @db.Timestamptz(6)
-  approvedById    String?        @db.Uuid
-  approvedBy      User?          @relation("UserApprovedBy", fields: [approvedById], references: [id], onDelete: SetNull)
-  approved        User[]         @relation("UserApprovedBy")
-  tasks           Task[]         @relation("TaskAssignee")
-  createdTasks    Task[]         @relation("TaskCreatedBy")
-  createdProjects Project[]      @relation("ProjectCreatedBy")
+  role            UserRole         @default(MEMBER)
+  status          UserStatus       @default(PENDING)
+  approvedAt      DateTime?        @db.Timestamptz(6)
+  approvedById    String?          @db.Uuid
+  approvedBy      User?            @relation("UserApprovedBy", fields: [approvedById], references: [id], onDelete: SetNull)
+  approved        User[]           @relation("UserApprovedBy")
+  /// Mail-worthy events a member can dial down. Never gates the in-app feed —
+  /// only whether a copy also goes out as email. Account approval and workspace
+  /// invitations ignore these: they are the one mail a person who can't yet
+  /// see the app needs to receive.
+  emailOnAssigned Boolean          @default(true)
+  emailOnComment  Boolean          @default(true)
+  emailOnDueSoon  Boolean          @default(true)
+  tasks           Task[]           @relation("TaskAssignee")
+  createdTasks    Task[]           @relation("TaskCreatedBy")
+  createdProjects Project[]        @relation("ProjectCreatedBy")
+  projectMemberships ProjectMember[]
   comments        Comment[]
-  notifications   Notification[] @relation("NotificationRecipient")
-  actedOn         Notification[] @relation("NotificationActor")
+  notifications   Notification[]  @relation("NotificationRecipient")
+  actedOn         Notification[]  @relation("NotificationActor")
   apiTokens       ApiToken[]
-  invitationsSent Invitation[]   @relation("InvitationInvitedBy")
-  createdAt       DateTime       @default(now()) @db.Timestamptz(6)
-  updatedAt       DateTime       @updatedAt @db.Timestamptz(6)
+  invitationsSent Invitation[]     @relation("InvitationInvitedBy")
+  createdAt       DateTime         @default(now()) @db.Timestamptz(6)
+  updatedAt       DateTime         @updatedAt @db.Timestamptz(6)
 
   @@index([status], map: "User_status_idx")
 }
@@ -128,18 +136,46 @@ model Invitation {
 /// is absent from this model and only enforced by Postgres — a duplicate name
 /// arrives as P2002 rather than being caught by the client.
 model Project {
-  id          String   @id @default(uuid()) @db.Uuid
+  id          String          @id @default(uuid()) @db.Uuid
   name        String
   description String?
   /// A palette key from src/lib/types.ts, never free-form CSS.
   color       String?
   /// Archived projects keep their tasks but leave the sidebar and the pickers.
-  archived    Boolean  @default(false)
-  createdById String?  @db.Uuid
-  createdBy   User?    @relation("ProjectCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  archived    Boolean         @default(false)
+  createdById String?         @db.Uuid
+  createdBy   User?           @relation("ProjectCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
   tasks       Task[]
-  createdAt   DateTime @default(now()) @db.Timestamptz(6)
-  updatedAt   DateTime @updatedAt @db.Timestamptz(6)
+  /// Who may see or edit this project's tasks at all. Global admins bypass
+  /// this entirely — see `taskflow.is_admin()`. A task with no project is
+  /// unfiled and stays visible to every active member regardless.
+  members     ProjectMember[]
+  createdAt   DateTime        @default(now()) @db.Timestamptz(6)
+  updatedAt   DateTime        @updatedAt @db.Timestamptz(6)
+}
+
+enum ProjectRole {
+  /// Read-only: sees the project's tasks, cannot create, edit or delete them.
+  VIEWER
+  /// Full task CRUD within the project, and can manage its membership.
+  EDITOR
+
+  @@map("project_role")
+}
+
+/// One row per (project, user) who may access it. The project's creator gets
+/// one automatically, as EDITOR, at creation.
+model ProjectMember {
+  id        String      @id @default(uuid()) @db.Uuid
+  projectId String      @db.Uuid
+  project   Project     @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  userId    String      @db.Uuid
+  user      User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  role      ProjectRole @default(EDITOR)
+  createdAt DateTime    @default(now()) @db.Timestamptz(6)
+
+  @@unique([projectId, userId], map: "ProjectMember_projectId_userId_key")
+  @@index([userId], map: "ProjectMember_userId_idx")
 }
 
 model Task {
@@ -148,6 +184,10 @@ model Task {
   description   Json?
   status        TaskStatus     @default(TODO)
   priority      TaskPriority   @default(NONE)
+  /// When work on this task is planned to begin. Optional, and independent of
+  /// status — starting the clock is a planning decision, not a state change.
+  /// Powers the Gantt view; `dueDate` doubles as the end of its bar there.
+  startDate     DateTime?      @db.Timestamptz(6)
   dueDate       DateTime?      @db.Timestamptz(6)
   order         Float          @default(0)
   /// Null means unfiled. Deleting a project clears this rather than the task.
@@ -157,6 +197,15 @@ model Task {
   assignee      User?          @relation("TaskAssignee", fields: [assigneeId], references: [id], onDelete: SetNull)
   createdById   String?        @db.Uuid
   createdBy     User?          @relation("TaskCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  /// Null means top-level. A subtask is an ordinary task otherwise — same
+  /// status, assignee and notifications — that is filed under another one and
+  /// left off the board, list and calendar so it doesn't double-count there.
+  /// Nesting is one level deep: the API refuses to give a subtask subtasks of
+  /// its own, which is what "on delete cascade" here relies on — a subtask
+  /// deleted with its parent is never itself a parent.
+  parentId      String?        @db.Uuid
+  parent        Task?          @relation("TaskSubtasks", fields: [parentId], references: [id], onDelete: Cascade)
+  subtasks      Task[]         @relation("TaskSubtasks")
   comments      Comment[]
   attachments   Attachment[]
   tags          TaskTag[]
@@ -169,6 +218,7 @@ model Task {
   @@index([priority], map: "Task_priority_idx")
   @@index([status, order], map: "Task_order_idx")
   @@index([projectId], map: "Task_projectId_idx")
+  @@index([parentId], map: "Task_parentId_idx")
 }
 
 model Comment {

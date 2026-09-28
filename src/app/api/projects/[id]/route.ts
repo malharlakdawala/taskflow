@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { Prisma } from "@/generated/prisma/client";
 import { prisma } from "@/lib/prisma";
 import { requireMember } from "@/lib/auth";
+import { getProjectRole, requireProjectRole } from "@/lib/project-access";
 import { updateProjectSchema, formatZodError } from "@/lib/validation";
 import { PROJECT_LIST_SELECT, serializeProject } from "@/lib/projects";
 
@@ -28,6 +29,9 @@ export async function GET(
 
   const { id } = await params;
 
+  const rejection = await requireProjectRole(guard.user, id, "VIEWER");
+  if (rejection) return rejection;
+
   const [project, doneCount] = await Promise.all([
     prisma.project.findUnique({
       where: { id },
@@ -39,7 +43,12 @@ export async function GET(
 
   if (!project) return notFound();
 
-  return NextResponse.json(serializeProject(project, doneCount));
+  const myRole =
+    guard.user.role === "ADMIN"
+      ? "EDITOR"
+      : ((await getProjectRole(guard.user.id, id)) ?? "VIEWER");
+
+  return NextResponse.json(serializeProject(project, doneCount, myRole));
 }
 
 export async function PATCH(
@@ -50,6 +59,9 @@ export async function PATCH(
   if (!guard.ok) return guard.response;
 
   const { id } = await params;
+
+  const rejection = await requireProjectRole(guard.user, id, "EDITOR");
+  if (rejection) return rejection;
 
   const parsed = updateProjectSchema.safeParse(await request.json());
   if (!parsed.success) {
@@ -77,7 +89,8 @@ export async function PATCH(
       countDone(id),
     ]);
 
-    return NextResponse.json(serializeProject(project, doneCount));
+    // requireProjectRole already confirmed EDITOR (or admin) above.
+    return NextResponse.json(serializeProject(project, doneCount, "EDITOR"));
   } catch (error) {
     if (error instanceof Prisma.PrismaClientKnownRequestError) {
       if (error.code === "P2025") return notFound();
@@ -95,6 +108,9 @@ export async function DELETE(
   if (!guard.ok) return guard.response;
 
   const { id } = await params;
+
+  const rejection = await requireProjectRole(guard.user, id, "EDITOR");
+  if (rejection) return rejection;
 
   // Counted before the delete so the UI can say what happened to the work.
   // `on delete set null` means these tasks survive as unfiled rather than

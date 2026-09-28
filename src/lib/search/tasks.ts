@@ -2,6 +2,7 @@ import "server-only";
 
 import { Prisma } from "@/generated/prisma/client";
 import { prisma } from "@/lib/prisma";
+import type { AppUser } from "@/lib/auth";
 import { asProjectColor } from "@/lib/projects";
 import { buildSnippet, parseSearchTerms } from "@/lib/search/terms";
 import { toPlainText } from "@/lib/utils";
@@ -76,9 +77,26 @@ export interface TaskSearchPage {
 
 const EMPTY_PAGE: TaskSearchPage = { results: [], hasMore: false };
 
-export async function searchTasks(query: string): Promise<TaskSearchPage> {
+export async function searchTasks(
+  query: string,
+  user: Pick<AppUser, "id" | "role">
+): Promise<TaskSearchPage> {
   const terms = parseSearchTerms(query);
   if (terms.length === 0) return EMPTY_PAGE;
+
+  // Same rule as every other list: unfiled work is searchable by anyone, a
+  // restricted project's tasks only by its members. An admin's query is
+  // unconstrained, same as everywhere else.
+  const accessible =
+    user.role === "ADMIN"
+      ? Prisma.sql`true`
+      : Prisma.sql`(
+          t."projectId" IS NULL
+          OR EXISTS (
+            SELECT 1 FROM "taskflow"."ProjectMember" pm
+            WHERE pm."projectId" = t."projectId" AND pm."userId" = ${user.id}::uuid
+          )
+        )`;
 
   const patterns = terms.map(likePattern);
   /** The phrase as typed, for ranking an exact run in the title first. */
@@ -158,7 +176,7 @@ export async function searchTasks(query: string): Promise<TaskSearchPage> {
       ORDER BY cm."createdAt" DESC
       LIMIT 1
     ) c ON true
-    WHERE ${Prisma.join(searchable, " AND ")}
+    WHERE ${accessible} AND ${Prisma.join(searchable, " AND ")}
     ORDER BY
       CASE
         WHEN t."title" ILIKE ${phrase} THEN 3

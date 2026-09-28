@@ -56,6 +56,7 @@ export function CreateTaskDialog({
   const [description, setDescription] = useState("");
   const [status, setStatus] = useState<TaskStatus>(defaultStatus ?? "TODO");
   const [priority, setPriority] = useState<TaskPriority>("NONE");
+  const [startDate, setStartDate] = useState("");
   const [dueDate, setDueDate] = useState("");
   const [assigneeId, setAssigneeId] = useState<string | null>(null);
   const [projectId, setProjectId] = useState<string | null>(
@@ -92,6 +93,7 @@ export function CreateTaskDialog({
     setDescription("");
     setStatus(defaultStatus ?? "TODO");
     setPriority("NONE");
+    setStartDate("");
     setDueDate("");
     setAssigneeId(null);
     setProjectId(defaultProjectId ?? null);
@@ -151,6 +153,7 @@ export function CreateTaskDialog({
           description,
           status,
           priority,
+          startDate: startDate || null,
           dueDate: dueDate || null,
           assigneeId,
           projectId,
@@ -338,11 +341,22 @@ export function CreateTaskDialog({
                 </Select>
               </div>
               <div className="grid gap-2">
+                <Label htmlFor="startDate">Start Date</Label>
+                <Input
+                  id="startDate"
+                  type="date"
+                  value={startDate}
+                  max={dueDate || undefined}
+                  onChange={(e) => setStartDate(e.target.value)}
+                />
+              </div>
+              <div className="grid gap-2">
                 <Label htmlFor="dueDate">Due Date</Label>
                 <Input
                   id="dueDate"
                   type="date"
                   value={dueDate}
+                  min={startDate || undefined}
                   onChange={(e) => setDueDate(e.target.value)}
                 />
               </div>

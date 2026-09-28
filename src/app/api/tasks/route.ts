@@ -5,6 +5,8 @@ import { requireMember } from "@/lib/auth";
 import { sanitizeOrNull } from "@/lib/sanitize";
 import { createTaskSchema, formatZodError } from "@/lib/validation";
 import { notifyTaskAssigned } from "@/lib/notifications/dispatch";
+import { checkParent } from "@/lib/tasks-parent";
+import { accessibleTasksFilter, requireTaskProjectRole } from "@/lib/project-access";
 import {
   TASK_LIST_SELECT,
   TASK_DETAIL_INCLUDE,
@@ -20,6 +22,14 @@ export async function GET() {
   if (!guard.ok) return guard.response;
 
   const tasks = await prisma.task.findMany({
+    where: {
+      // Subtasks live on their parent's detail page, not here — otherwise
+      // every board, list and calendar count would double up on them.
+      parentId: null,
+      // A task filed in a project this member isn't on doesn't exist as far
+      // as the board, list or calendar are concerned.
+      ...accessibleTasksFilter(guard.user),
+    },
     // One JOIN rather than a query per relation — round-trips are the
     // dominant cost against a geographically distant database.
     relationLoadStrategy: "join",
@@ -39,9 +49,25 @@ export async function POST(request: Request) {
     return NextResponse.json(formatZodError(parsed.error), { status: 400 });
   }
 
-  const { title, description, status, priority, dueDate, assigneeId, projectId } =
+  const { title, description, status, priority, startDate, dueDate, assigneeId, projectId, parentId } =
     parsed.data;
   const resolvedStatus = status ?? "TODO";
+
+  // A subtask is filed wherever its parent is — never separately — so this
+  // overrides any projectId the caller sent alongside parentId.
+  let resolvedProjectId = projectId ?? null;
+  if (parentId) {
+    const parentCheck = await checkParent(parentId);
+    if (!parentCheck.ok) return parentCheck.response;
+    resolvedProjectId = parentCheck.parentProjectId;
+  }
+
+  const accessRejection = await requireTaskProjectRole(
+    guard.user,
+    resolvedProjectId,
+    "EDITOR"
+  );
+  if (accessRejection) return accessRejection;
 
   const last = await prisma.task.findFirst({
     where: { status: resolvedStatus },
@@ -57,12 +83,14 @@ export async function POST(request: Request) {
         description: sanitizeOrNull(description) ?? undefined,
         status: resolvedStatus,
         priority: priority ?? "NONE",
+        startDate: startDate ? new Date(startDate) : undefined,
         dueDate: dueDate ? new Date(dueDate) : undefined,
         order: (last?.order ?? 0) + 1000,
         // Null is the default: a task filed nowhere is unfiled, not invalid.
-        projectId: projectId ?? null,
+        projectId: resolvedProjectId,
         assigneeId: assigneeId ?? guard.user.id,
         createdById: guard.user.id,
+        parentId: parentId ?? null,
       },
       relationLoadStrategy: "join",
       include: TASK_DETAIL_INCLUDE,

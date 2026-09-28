@@ -35,6 +35,11 @@ export default async function SettingsPage() {
           isAdmin={isAdmin}
           userId={user.id}
           userEmail={user.email}
+          emailPreferences={{
+            emailOnAssigned: user.emailOnAssigned,
+            emailOnComment: user.emailOnComment,
+            emailOnDueSoon: user.emailOnDueSoon,
+          }}
         />
       </div>
     </div>

@@ -67,6 +67,9 @@ const RECIPIENT_SELECT = {
   email: true,
   name: true,
   status: true,
+  emailOnAssigned: true,
+  emailOnComment: true,
+  emailOnDueSoon: true,
 } as const;
 
 type Recipient = {
@@ -74,6 +77,9 @@ type Recipient = {
   email: string;
   name: string | null;
   status: "PENDING" | "ACTIVE" | "REJECTED";
+  emailOnAssigned: boolean;
+  emailOnComment: boolean;
+  emailOnDueSoon: boolean;
 };
 
 /**
@@ -167,7 +173,7 @@ export async function notifyTaskAssigned({
       },
     ]);
 
-    if (!isEmailConfigured()) return;
+    if (!isEmailConfigured() || !task.assignee.emailOnAssigned) return;
 
     const built = taskAssignedEmail({
       taskTitle: task.title,
@@ -247,7 +253,7 @@ export async function notifyTasksAssigned({
       },
     ]);
 
-    if (!isEmailConfigured()) return;
+    if (!isEmailConfigured() || !assignee.emailOnAssigned) return;
 
     const built = tasksAssignedEmail({
       items: tasks.map((task) => ({ title: task.title, url: taskUrl(task.id) })),
@@ -560,6 +566,12 @@ export async function notifyCommentAdded({
 
     if (!isEmailConfigured()) return;
 
+    // Each recipient dials this in separately, so the "to" list is trimmed
+    // rather than the send skipped outright — one uninterested recipient
+    // should not also silence the one who wants to know.
+    const mailRecipients = recipients.filter((user) => user.emailOnComment);
+    if (mailRecipients.length === 0) return;
+
     const built = commentAddedEmail({
       taskTitle: task.title,
       taskUrl: `${appUrl()}${commentPath(taskId, commentId)}`,
@@ -569,7 +581,7 @@ export async function notifyCommentAdded({
     });
 
     await sendEmail({
-      to: recipients.map(({ email, name }) => ({ email, name })),
+      to: mailRecipients.map(({ email, name }) => ({ email, name })),
       ...built,
       tags: ["task-comment"],
     });
@@ -726,7 +738,9 @@ export async function notifyDueSoon(): Promise<{
       id: true,
       title: true,
       dueDate: true,
-      assignee: { select: { id: true, email: true, name: true } },
+      assignee: {
+        select: { id: true, email: true, name: true, emailOnDueSoon: true },
+      },
     },
     orderBy: { dueDate: "asc" },
   });
@@ -751,6 +765,7 @@ export async function notifyDueSoon(): Promise<{
   type Bucket = {
     email: string;
     name: string | null;
+    emailOnDueSoon: boolean;
     overdue: Array<{ title: string; url: string; due: string }>;
     soon: Array<{ title: string; url: string; due: string }>;
   };
@@ -764,6 +779,7 @@ export async function notifyDueSoon(): Promise<{
       {
         email: task.assignee.email,
         name: task.assignee.name,
+        emailOnDueSoon: task.assignee.emailOnDueSoon,
         overdue: [],
         soon: [],
       };
@@ -796,6 +812,8 @@ export async function notifyDueSoon(): Promise<{
     const boardUrl = `${appUrl()}/board`;
 
     for (const bucket of byAssignee.values()) {
+      if (!bucket.emailOnDueSoon) continue;
+
       // Overdue is the more urgent framing, so it wins the subject line when
       // someone has both.
       const overdue = bucket.overdue.length > 0;

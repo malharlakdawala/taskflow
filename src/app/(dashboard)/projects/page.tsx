@@ -9,11 +9,14 @@ import {
   Archive,
   ArchiveRestore,
   FolderPlus,
+  GanttChartSquare,
   Pencil,
   Plus,
   Trash2,
+  Users,
 } from "lucide-react";
 import { ProjectDialog } from "@/components/projects/project-dialog";
+import { ProjectMembersDialog } from "@/components/projects/project-members-dialog";
 import { ProjectDot } from "@/components/projects/project-badge";
 import { notify } from "@/lib/notify";
 import { useProjects, invalidateProjects } from "@/lib/use-projects";
@@ -28,6 +31,7 @@ export default function ProjectsPage() {
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [editing, setEditing] = useState<Project | null>(null);
   const [deleting, setDeleting] = useState<Project | null>(null);
+  const [managingMembers, setManagingMembers] = useState<Project | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
   // Bumped on every open so ProjectDialog remounts with fresh fields — see the
   // note on that component about why it initialises once rather than resyncing.
@@ -171,44 +175,64 @@ export default function ProjectsPage() {
           </div>
         </div>
 
-        <div className="mt-4 flex items-center gap-1 border-t pt-3">
-          <Button
-            size="sm"
-            variant="ghost"
-            disabled={isBusy}
-            onClick={() => openEdit(project)}
-          >
-            <Pencil className="mr-1 h-3.5 w-3.5" />
-            Edit
+        <div className="mt-4 flex flex-wrap items-center gap-1 border-t pt-3">
+          <Button size="sm" variant="ghost" render={<Link href={`/projects/${project.id}/gantt`} />}>
+            <GanttChartSquare className="mr-1 h-3.5 w-3.5" />
+            Gantt
           </Button>
-          <Button
-            size="sm"
-            variant="ghost"
-            disabled={isBusy}
-            onClick={() => setArchived(project, !project.archived)}
-          >
-            {project.archived ? (
-              <>
-                <ArchiveRestore className="mr-1 h-3.5 w-3.5" />
-                Restore
-              </>
-            ) : (
-              <>
-                <Archive className="mr-1 h-3.5 w-3.5" />
-                Archive
-              </>
-            )}
-          </Button>
-          <Button
-            size="sm"
-            variant="ghost"
-            className="ml-auto text-destructive hover:text-destructive"
-            disabled={isBusy}
-            onClick={() => setDeleting(project)}
-          >
-            <Trash2 className="mr-1 h-3.5 w-3.5" />
-            Delete
-          </Button>
+          {/* A VIEWER can look at a project's tasks but not reshape the
+              project itself — editing, membership and deletion are an
+              EDITOR's job, same bar as editing its tasks. */}
+          {project.myRole === "EDITOR" && (
+            <>
+              <Button
+                size="sm"
+                variant="ghost"
+                disabled={isBusy}
+                onClick={() => setManagingMembers(project)}
+              >
+                <Users className="mr-1 h-3.5 w-3.5" />
+                Members
+              </Button>
+              <Button
+                size="sm"
+                variant="ghost"
+                disabled={isBusy}
+                onClick={() => openEdit(project)}
+              >
+                <Pencil className="mr-1 h-3.5 w-3.5" />
+                Edit
+              </Button>
+              <Button
+                size="sm"
+                variant="ghost"
+                disabled={isBusy}
+                onClick={() => setArchived(project, !project.archived)}
+              >
+                {project.archived ? (
+                  <>
+                    <ArchiveRestore className="mr-1 h-3.5 w-3.5" />
+                    Restore
+                  </>
+                ) : (
+                  <>
+                    <Archive className="mr-1 h-3.5 w-3.5" />
+                    Archive
+                  </>
+                )}
+              </Button>
+              <Button
+                size="sm"
+                variant="ghost"
+                className="ml-auto text-destructive hover:text-destructive"
+                disabled={isBusy}
+                onClick={() => setDeleting(project)}
+              >
+                <Trash2 className="mr-1 h-3.5 w-3.5" />
+                Delete
+              </Button>
+            </>
+          )}
         </div>
       </div>
     );
@@ -301,6 +325,12 @@ export default function ProjectsPage() {
         onConfirm={async () => {
           if (deleting) await handleDelete(deleting);
         }}
+      />
+
+      <ProjectMembersDialog
+        key={managingMembers?.id ?? "none"}
+        project={managingMembers}
+        onOpenChange={(open) => !open && setManagingMembers(null)}
       />
     </div>
   );

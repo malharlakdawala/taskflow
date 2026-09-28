@@ -73,6 +73,18 @@ for any picture in a description, comment or attachment.
 - **Authentication** — Email/password sign-up and login via Supabase Auth
 - **Kanban Board** — Drag and drop across status columns; position is persisted
 - **Calendar View** — Tasks laid out by due date
+- **Subtasks** — Break a task down into a checklist filed under it. A subtask
+  is an ordinary task underneath — its own status, priority and assignee —
+  just left off the board, list and calendar so it doesn't double-count.
+  Nesting is one level deep
+- **Project Permissions** — A project can be shared with specific members
+  instead of the whole workspace: VIEWER sees its tasks, EDITOR can also
+  create, edit and delete them. An unfiled task stays visible to everyone, as
+  before — only a task filed into a restricted project is gated. Search
+  respects this too
+- **Start & Due Dates + Gantt** — Give a task a planned start alongside its
+  due date, then open a project's **Gantt** view to see every dated task laid
+  out on a timeline, with an estimated completion date
 - **Dashboard** — Stats overview with status and priority breakdowns. Every
   count is a link into the list, filtered to exactly the tasks it counted
 - **List View** — Sortable, with multi-select and bulk edit of status, priority,
@@ -95,7 +107,10 @@ for any picture in a description, comment or attachment.
 - **Notifications** — A bell in the sidebar with an unread badge, a full feed at
   `/notifications`, and a deep link on every entry that opens the exact task or
   comment it refers to. Covers assignments, field edits (including a card
-  dragged to another column), comments, due-date warnings and account approval
+  dragged to another column), comments, due-date warnings and account approval.
+  Settings → Notifications lets each member turn the emailed copy of
+  assignments, comments or due-date reminders off individually — the in-app
+  feed always gets one regardless
 - **File Attachments** — Uploads to Supabase Storage, recorded against the task
 - **Admin Settings** — Approve or decline new sign-ups, manage roles
 - **Dark Mode**
@@ -326,14 +341,23 @@ their [regions docs](https://vercel.com/docs/edge-network/regions).
 
 - All application tables have RLS enabled; `anon` has no grants at all, and the
   `taskflow` schema is not exposed to the Data API.
-- RLS mirrors the approval model: `taskflow.is_active_member()` gates task data
-  and `taskflow.is_admin()` gates member management.
+- RLS mirrors the approval and project-membership model: `taskflow.is_active_member()`
+  gates task data, `taskflow.is_admin()` gates member management, and `Task`
+  additionally checks `ProjectMember` for a task filed into a project. In
+  practice the Next.js routes (`src/lib/project-access.ts`) are what actually
+  enforce this, since Prisma connects with a fixed database role rather than a
+  per-request one — RLS is the backstop for any other access path.
 - Attachment URLs are public and unguessable (uuid-prefixed), but the bucket
   cannot be listed — there is no SELECT policy on `storage.objects`, so nobody
   can enumerate uploads. Writes are confined to the uploader's own `<uid>/` prefix.
-- The workspace is **shared** — every *approved* user can see and edit every
-  task. Comments can only be edited or deleted by their author, and
-  notifications and MCP tokens are private to one person.
+- The workspace is **shared by default, restrictable per project**. An unfiled
+  task is visible to every approved member, same as always. A project can be
+  narrowed to a roster instead: VIEWER reads its tasks, EDITOR can also create,
+  edit and delete them, and a member with neither reads as though the project
+  doesn't exist — the task and project APIs, and search, all return 404/empty
+  rather than a 403 that would confirm something is there. A global admin
+  bypasses membership entirely. Comments can only be edited or deleted by their
+  author, and notifications and MCP tokens are private to one person.
 - Sign-up is open but grants nothing: new accounts sit in `PENDING` until an
   admin approves them, and the server layout refuses to render task data to
   them. You can close sign-ups entirely in Supabase → Authentication →
@@ -491,6 +515,8 @@ src/
 │   ├── mcp/             # Personal access tokens + the hosted MCP tools
 │   ├── notifications/   # Who gets told what, over which channel
 │   ├── prisma.ts        # Prisma client singleton (taskflow schema)
+│   ├── project-access.ts # Per-project VIEWER/EDITOR checks, used by every
+│   │                     # route that touches a task or a project
 │   ├── search/          # Keyword parsing + the cross-task search query
 │   ├── storage.ts       # Supabase Storage upload helpers
 │   ├── supabase/        # Supabase clients (browser, server, session)

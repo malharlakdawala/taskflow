@@ -5,6 +5,7 @@ import { z } from "zod";
 import { Prisma } from "@/generated/prisma/client";
 import { prisma } from "@/lib/prisma";
 import type { AppUser } from "@/lib/auth";
+import { accessibleProjectsFilter, accessibleTasksFilter, getProjectRole } from "@/lib/project-access";
 import { PROJECT_COLORS, type ProjectColor } from "@/lib/types";
 import { sanitizeOrNull } from "@/lib/sanitize";
 import { toRichHtml } from "@/lib/rich-text";
@@ -96,7 +97,35 @@ const TASK_SUMMARY = {
   assignee: { select: { email: true, name: true } },
   // Named, not id'd: the name is what every project argument here expects back.
   project: { select: { name: true } },
+  // The raw id, kept internal to this module — every tool needs it to check
+  // project access, even though callers only ever ask for a project by name.
+  projectId: true,
 } satisfies Prisma.TaskSelect;
+
+/**
+ * Same rule the REST API enforces, applied to the MCP surface: a token acts as
+ * one member, so it gets exactly that member's project access, not a bypass of
+ * it. `taskId`, when given, makes a denial read as "no such task" rather than
+ * "forbidden" — a token holder should not learn that a task exists in a
+ * project they cannot see.
+ */
+async function requireProjectAccess(
+  actor: AppUser,
+  projectId: string | null,
+  minRole: "VIEWER" | "EDITOR",
+  taskId?: string
+): Promise<void> {
+  if (projectId === null || actor.role === "ADMIN") return;
+
+  const role = await getProjectRole(actor.id, projectId);
+  if (role === null) {
+    if (taskId) notFound(taskId);
+    throw new McpToolError("You don't have access to that project");
+  }
+  if (minRole === "EDITOR" && role !== "EDITOR") {
+    throw new McpToolError("You have read-only access to that project");
+  }
+}
 
 async function resolveAssignee(email: string | undefined): Promise<string | null> {
   if (!email) return null;
@@ -162,6 +191,7 @@ const createTask: McpTool = {
       description: str("Task description. Markdown is supported."),
       status: enumOf(STATUSES, "Defaults to TODO"),
       priority: enumOf(PRIORITIES, "Defaults to NONE"),
+      start_date: str("Planned start date as YYYY-MM-DD"),
       due_date: str("Due date as YYYY-MM-DD"),
       assignee_email: str("Member to assign it to. Defaults to you."),
       project: str("Project name to file it under. Defaults to unfiled."),
@@ -173,6 +203,7 @@ const createTask: McpTool = {
     description: z.string().max(100_000).optional(),
     status: z.enum(STATUSES).optional(),
     priority: z.enum(PRIORITIES).optional(),
+    start_date: z.string().optional(),
     due_date: z.string().optional(),
     assignee_email: z.string().optional(),
     project: z.string().optional(),
@@ -183,6 +214,7 @@ const createTask: McpTool = {
       description?: string;
       status?: (typeof STATUSES)[number];
       priority?: (typeof PRIORITIES)[number];
+      start_date?: string;
       due_date?: string;
       assignee_email?: string;
       project?: string;
@@ -190,6 +222,7 @@ const createTask: McpTool = {
 
     const assigneeId = await resolveAssignee(input.assignee_email);
     const projectId = await resolveProject(input.project, { forFiling: true });
+    await requireProjectAccess(actor, projectId, "EDITOR");
     const status = input.status ?? "TODO";
 
     // Same ordering rule as the REST route: new work lands at the bottom of
@@ -206,6 +239,7 @@ const createTask: McpTool = {
         description: asStoredRichText(input.description) ?? undefined,
         status,
         priority: input.priority ?? "NONE",
+        startDate: parseDate(input.start_date) ?? undefined,
         dueDate: parseDate(input.due_date) ?? undefined,
         order: (last?.order ?? 0) + 1000,
         assigneeId: assigneeId ?? actor.id,
@@ -286,6 +320,9 @@ const listTasks: McpTool = {
         ...(assigneeId && { assigneeId }),
         ...(projectId && { projectId }),
         ...(input.unfiled && { projectId: null }),
+        // A project named here that this member can't see just yields no
+        // rows, same as any other filter that happens to match nothing.
+        ...accessibleTasksFilter(actor),
       },
       select: TASK_SUMMARY,
       relationLoadStrategy: "join",
@@ -303,7 +340,7 @@ const getTask: McpTool = {
     "Everything about one task, including its comments and attachments.",
   inputSchema: object({ task_id: str("Task id") }, ["task_id"]),
   schema: z.object({ task_id: z.uuid() }),
-  async run(args) {
+  async run(args, actor) {
     const { task_id } = args as { task_id: string };
 
     const task = await prisma.task.findUnique({
@@ -330,6 +367,7 @@ const getTask: McpTool = {
     });
 
     if (!task) notFound(task_id);
+    await requireProjectAccess(actor, task!.projectId, "VIEWER", task_id);
 
     // Agents read text, not markup. Both columns are stored as rich HTML, so
     // they are flattened on the way out rather than shipping tags into a
@@ -360,6 +398,7 @@ const updateTask: McpTool = {
       description: str("New description. Markdown is supported."),
       status: enumOf(STATUSES, "New status"),
       priority: enumOf(PRIORITIES, "New priority"),
+      start_date: str("New start date as YYYY-MM-DD, or empty string to clear it"),
       due_date: str("New due date as YYYY-MM-DD, or empty string to clear it"),
       assignee_email: str("Member to reassign it to, or empty string to unassign"),
       project: str("Project name to move it to, or empty string to unfile it"),
@@ -372,6 +411,7 @@ const updateTask: McpTool = {
     description: z.string().max(100_000).optional(),
     status: z.enum(STATUSES).optional(),
     priority: z.enum(PRIORITIES).optional(),
+    start_date: z.string().optional(),
     due_date: z.string().optional(),
     assignee_email: z.string().optional(),
     project: z.string().optional(),
@@ -383,6 +423,7 @@ const updateTask: McpTool = {
       description?: string;
       status?: (typeof STATUSES)[number];
       priority?: (typeof PRIORITIES)[number];
+      start_date?: string;
       due_date?: string;
       assignee_email?: string;
       project?: string;
@@ -395,6 +436,7 @@ const updateTask: McpTool = {
     }
     if (input.status !== undefined) data.status = input.status;
     if (input.priority !== undefined) data.priority = input.priority;
+    if (input.start_date !== undefined) data.startDate = parseDate(input.start_date);
     if (input.due_date !== undefined) data.dueDate = parseDate(input.due_date);
 
     // An empty string is how a text-only protocol says "clear this".
@@ -407,10 +449,12 @@ const updateTask: McpTool = {
     }
 
     // Same convention: "" unfiles the task rather than meaning "leave it alone".
+    let nextProjectId: string | null | undefined;
     if (input.project !== undefined) {
-      data.projectId = input.project
+      nextProjectId = input.project
         ? await resolveProject(input.project, { forFiling: true })
         : null;
+      data.projectId = nextProjectId;
     }
 
     if (Object.keys(data).length === 0) {
@@ -418,8 +462,10 @@ const updateTask: McpTool = {
     }
 
     // Read only the columns about to be written, so the diff the notification
-    // describes is exactly the change that was asked for.
-    const beforeSelect: Prisma.TaskSelect = {};
+    // describes is exactly the change that was asked for. `projectId` is
+    // always read too — every update needs it to check access to the task as
+    // it stands today, whether or not this call is the one moving it.
+    const beforeSelect: Prisma.TaskSelect = { projectId: true };
     if (nextAssigneeId !== undefined) beforeSelect.assigneeId = true;
     if (input.title !== undefined) beforeSelect.title = true;
     if (input.status !== undefined) beforeSelect.status = true;
@@ -429,7 +475,16 @@ const updateTask: McpTool = {
     const before = ((await prisma.task.findUnique({
       where: { id: input.task_id },
       select: beforeSelect,
-    })) ?? {}) as TaskSnapshot & { assigneeId?: string | null };
+    })) ?? null) as (TaskSnapshot & { assigneeId?: string | null; projectId: string | null }) | null;
+    if (!before) notFound(input.task_id);
+
+    await requireProjectAccess(actor, before!.projectId, "EDITOR", input.task_id);
+    // Moving a task into a project is filing new work there, same as creating
+    // it there directly — the destination needs EDITOR too, not just the
+    // project the task is leaving.
+    if (nextProjectId !== undefined) {
+      await requireProjectAccess(actor, nextProjectId, "EDITOR");
+    }
 
     let task;
     try {
@@ -453,13 +508,13 @@ const updateTask: McpTool = {
         notifyTaskAssigned({
           taskId: input.task_id,
           assigneeId: nextAssigneeId!,
-          previousAssigneeId: before.assigneeId ?? null,
+          previousAssigneeId: before!.assigneeId ?? null,
           actorId: actor.id,
         })
       );
     }
 
-    const changes = summarizeTaskChanges(before, {
+    const changes = summarizeTaskChanges(before!, {
       title: input.title,
       status: input.status,
       priority: input.priority,
@@ -480,8 +535,16 @@ const deleteTask: McpTool = {
   description: "Delete a task, along with its comments and attachments.",
   inputSchema: object({ task_id: str("Task id") }, ["task_id"]),
   schema: z.object({ task_id: z.uuid() }),
-  async run(args) {
+  async run(args, actor) {
     const { task_id } = args as { task_id: string };
+
+    const before = await prisma.task.findUnique({
+      where: { id: task_id },
+      select: { projectId: true },
+    });
+    if (!before) notFound(task_id);
+    await requireProjectAccess(actor, before!.projectId, "EDITOR", task_id);
+
     try {
       await prisma.task.delete({ where: { id: task_id } });
     } catch (error) {
@@ -519,9 +582,10 @@ const addComment: McpTool = {
 
     const task = await prisma.task.findUnique({
       where: { id: input.task_id },
-      select: { id: true },
+      select: { id: true, projectId: true },
     });
     if (!task) notFound(input.task_id);
+    await requireProjectAccess(actor, task!.projectId, "VIEWER", input.task_id);
 
     const comment = await prisma.comment.create({
       data: { content, taskId: input.task_id, authorId: actor.id },
@@ -571,9 +635,10 @@ const moveTask: McpTool = {
 
     const before = await prisma.task.findUnique({
       where: { id: input.task_id },
-      select: { status: true },
+      select: { status: true, projectId: true },
     });
     if (!before) notFound(input.task_id);
+    await requireProjectAccess(actor, before!.projectId, "EDITOR", input.task_id);
 
     const task = await prisma.task.update({
       where: { id: input.task_id },
@@ -607,11 +672,14 @@ const listProjects: McpTool = {
     },
   }),
   schema: z.object({ include_archived: z.boolean().optional() }),
-  async run(args) {
+  async run(args, actor) {
     const input = args as { include_archived?: boolean };
 
     const projects = await prisma.project.findMany({
-      where: input.include_archived ? {} : { archived: false },
+      where: {
+        ...(input.include_archived ? {} : { archived: false }),
+        ...accessibleProjectsFilter(actor),
+      },
       select: {
         name: true,
         description: true,
@@ -664,6 +732,9 @@ const createProject: McpTool = {
           description: input.description ?? null,
           color: input.color ?? null,
           createdById: actor.id,
+          // The creator needs to be able to use what they just made — same
+          // as the REST route, they start as its EDITOR.
+          members: { create: { userId: actor.id, role: "EDITOR" } },
         },
         select: {
           id: true,
