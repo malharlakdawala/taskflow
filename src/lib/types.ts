@@ -92,6 +92,9 @@ export interface ProjectSummary {
   archived: boolean;
 }
 
+/** VIEWER reads a project's tasks; EDITOR can also create, edit and delete them. */
+export type ProjectRole = "VIEWER" | "EDITOR";
+
 export interface Project extends ProjectSummary {
   description: string | null;
   createdById: string | null;
@@ -100,6 +103,28 @@ export interface Project extends ProjectSummary {
   /** How many tasks are filed here, and how many of those are done. */
   taskCount: number;
   doneCount: number;
+  /** The signed-in member's own role on this project. Always EDITOR for an admin. */
+  myRole: ProjectRole;
+}
+
+/** A project's roster, as Settings → Members and the project card's dialog see it. */
+export interface ProjectMember {
+  id: string;
+  role: ProjectRole;
+  createdAt: string;
+  user: User;
+}
+
+/** A subtask as its parent's checklist renders it — not the full task shape. */
+export interface Subtask {
+  id: string;
+  title: string;
+  status: TaskStatus;
+  priority: TaskPriority;
+  assigneeId: string | null;
+  assignee: User | null;
+  dueDate: string | null;
+  createdAt: string;
 }
 
 export interface Task {
@@ -108,6 +133,8 @@ export interface Task {
   description: string | null;
   status: TaskStatus;
   priority: TaskPriority;
+  /** When work is planned to begin. Optional, and independent of status. */
+  startDate: string | null;
   dueDate: string | null;
   order: number;
   /** Null means unfiled — the UI calls this "No project". */
@@ -117,6 +144,12 @@ export interface Task {
   assignee: User | null;
   createdById: string | null;
   createdBy: User | null;
+  /** Null for a top-level task. Set on a subtask, never on its own subtasks. */
+  parentId: string | null;
+  /** Enough to link back and say what it's part of. Null unless this is a subtask. */
+  parent: { id: string; title: string } | null;
+  /** Always empty on a subtask — nesting is one level deep. */
+  subtasks: Subtask[];
   comments: Comment[];
   attachments: Attachment[];
   tags: TaskTag[];

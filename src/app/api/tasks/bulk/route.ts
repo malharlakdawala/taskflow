@@ -3,6 +3,8 @@ import { Prisma } from "@/generated/prisma/client";
 import { prisma } from "@/lib/prisma";
 import { requireMember } from "@/lib/auth";
 import { bulkUpdateSchema, bulkDeleteSchema, formatZodError } from "@/lib/validation";
+import { getProjectRole, requireTaskProjectRole } from "@/lib/project-access";
+import type { AppUser } from "@/lib/auth";
 import {
   describeTaskValues,
   notifyTasksAssigned,
@@ -10,6 +12,30 @@ import {
   summarizeTaskChanges,
   type TaskSnapshot,
 } from "@/lib/notifications/dispatch";
+
+/**
+ * A bulk selection is chosen from an already-filtered list, so this only ever
+ * fires for a client working from a stale or tampered selection — but it's
+ * still checked, all-or-nothing, rather than silently applying to the subset
+ * that's allowed. Admin bypasses entirely, as everywhere else.
+ */
+async function forbiddenProject(
+  user: AppUser,
+  projectIds: Array<string | null>
+): Promise<NextResponse | null> {
+  if (user.role === "ADMIN") return null;
+  const distinct = [...new Set(projectIds)].filter((id): id is string => id !== null);
+  for (const projectId of distinct) {
+    const role = await getProjectRole(user.id, projectId);
+    if (role !== "EDITOR") {
+      return NextResponse.json(
+        { error: "You don't have edit access to one or more of these tasks" },
+        { status: 403 }
+      );
+    }
+  }
+  return null;
+}
 
 /**
  * Applies one change to many tasks in a single request. The list view's bulk
@@ -39,9 +65,10 @@ export async function PATCH(request: Request) {
   if (projectId !== undefined) data.projectId = projectId;
 
   // What the rows looked like before, read once and reused for both the
-  // "who is this newly on?" question and the change summary. Only the columns
-  // this request writes are read, so the pre-read stays proportional.
-  const beforeSelect: Prisma.TaskSelect = { id: true };
+  // "who is this newly on?" question, the change summary, and the access
+  // check below. Only the columns this request writes are read (plus
+  // projectId, always), so the pre-read stays proportional.
+  const beforeSelect: Prisma.TaskSelect = { id: true, projectId: true };
   if (assigneeId !== undefined) beforeSelect.assigneeId = true;
   if (status !== undefined) beforeSelect.status = true;
   if (priority !== undefined) beforeSelect.priority = true;
@@ -50,7 +77,17 @@ export async function PATCH(request: Request) {
   const before = (await prisma.task.findMany({
     where: { id: { in: ids } },
     select: beforeSelect,
-  })) as Array<TaskSnapshot & { id: string; assigneeId?: string | null }>;
+  })) as Array<TaskSnapshot & { id: string; assigneeId?: string | null; projectId: string | null }>;
+
+  const accessRejection = await forbiddenProject(
+    guard.user,
+    before.map((task) => task.projectId)
+  );
+  if (accessRejection) return accessRejection;
+  if (projectId !== undefined) {
+    const destinationRejection = await requireTaskProjectRole(guard.user, projectId, "EDITOR");
+    if (destinationRejection) return destinationRejection;
+  }
 
   // Which rows are genuinely changing hands. Comparing in JS rather than with
   // a `not` filter because SQL's NULL <> x is NULL, so an unassigned task
@@ -127,6 +164,16 @@ export async function DELETE(request: Request) {
   if (!parsed.success) {
     return NextResponse.json(formatZodError(parsed.error), { status: 400 });
   }
+
+  const targets = await prisma.task.findMany({
+    where: { id: { in: parsed.data.ids } },
+    select: { projectId: true },
+  });
+  const accessRejection = await forbiddenProject(
+    guard.user,
+    targets.map((task) => task.projectId)
+  );
+  if (accessRejection) return accessRejection;
 
   const result = await prisma.task.deleteMany({
     where: { id: { in: parsed.data.ids } },

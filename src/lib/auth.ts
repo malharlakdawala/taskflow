@@ -50,6 +50,9 @@ export type AppUser = {
   avatarUrl: string | null;
   role: UserRole;
   status: UserStatus;
+  emailOnAssigned: boolean;
+  emailOnComment: boolean;
+  emailOnDueSoon: boolean;
 };
 
 /**
@@ -74,6 +77,9 @@ export async function getAppUser(): Promise<AppUser | null> {
       avatarUrl: true,
       role: true,
       status: true,
+      emailOnAssigned: true,
+      emailOnComment: true,
+      emailOnDueSoon: true,
     },
   });
 }

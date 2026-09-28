@@ -35,9 +35,15 @@ export function ProjectPicker({
 
   // Archiving a project takes it out of the pickers — but not off the task it
   // is already on. Dropping it from this list would mean editing anything else
-  // about that task silently refiled it as unfiled.
+  // about that task silently refiled it as unfiled. Same exception for a
+  // VIEWER-only project: filing a task there would just be rejected by the
+  // API, so it's left off the menu, but a task already there keeps showing it.
   const selectable = useMemo(
-    () => projects.filter((project) => !project.archived || project.id === value),
+    () =>
+      projects.filter(
+        (project) =>
+          (!project.archived && project.myRole === "EDITOR") || project.id === value
+      ),
     [projects, value]
   );
   const selected = selectable.find((project) => project.id === value) ?? null;

@@ -27,6 +27,8 @@ import {
   MessageSquare,
   FileText,
   CalendarClock,
+  ListChecks,
+  CornerDownRight,
 } from "lucide-react";
 import {
   Select,
@@ -37,13 +39,14 @@ import {
 } from "@/components/ui/select";
 import { RichTextField } from "@/components/editor/rich-text-field";
 import { CommentList } from "@/components/tasks/comment-list";
+import { SubtaskList } from "@/components/tasks/subtask-list";
 import { AssigneePicker } from "@/components/tasks/assignee-picker";
 import { ProjectPicker } from "@/components/projects/project-picker";
 import { UserChip } from "@/components/tasks/user-chip";
 import { StatusBadge, PriorityBadge, StatusDot } from "@/components/tasks/status-badge";
 import { cn } from "@/lib/utils";
 import { notify } from "@/lib/notify";
-import type { Attachment, Comment, Task } from "@/lib/types";
+import type { Attachment, Comment, Subtask, Task } from "@/lib/types";
 import { STATUS_ITEMS, PRIORITY_ITEMS } from "@/lib/types";
 
 /**
@@ -231,6 +234,31 @@ export default function TaskDetailPage() {
     );
   };
 
+  const handleSubtaskAdded = (subtask: Subtask) => {
+    setTask((prev) =>
+      prev ? { ...prev, subtasks: [...prev.subtasks, subtask] } : prev
+    );
+  };
+
+  const handleSubtaskChanged = (subtask: Subtask) => {
+    setTask((prev) =>
+      prev
+        ? {
+            ...prev,
+            subtasks: prev.subtasks.map((s) => (s.id === subtask.id ? subtask : s)),
+          }
+        : prev
+    );
+  };
+
+  const handleSubtaskRemoved = (subtaskId: string) => {
+    setTask((prev) =>
+      prev
+        ? { ...prev, subtasks: prev.subtasks.filter((s) => s.id !== subtaskId) }
+        : prev
+    );
+  };
+
   if (isLoading) return <DetailSkeleton />;
 
   if (notFound || !task) {
@@ -293,6 +321,18 @@ export default function TaskDetailPage() {
             <StatusDot status={task.status} />
             {STATUS_ITEMS[task.status]}
           </span>
+          {task.parent && (
+            <>
+              <span aria-hidden>/</span>
+              <Link
+                href={`/tasks/${task.parent.id}`}
+                className="flex items-center gap-1 rounded px-1 py-0.5 transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
+              >
+                <CornerDownRight className="h-3 w-3" />
+                Subtask of {task.parent.title}
+              </Link>
+            </>
+          )}
         </nav>
 
         <div className="flex items-start justify-between gap-4">
@@ -399,6 +439,33 @@ export default function TaskDetailPage() {
                 />
               </CardContent>
             </Card>
+
+            {(task.subtasks.length > 0 || !task.parent) && (
+              <Card>
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2 text-base">
+                    <ListChecks className="h-4 w-4 text-muted-foreground" />
+                    Subtasks
+                    {task.subtasks.length > 0 && (
+                      <Count
+                        value={task.subtasks.length}
+                        label={`${task.subtasks.filter((s) => s.status === "DONE").length}/${task.subtasks.length}`}
+                      />
+                    )}
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <SubtaskList
+                    parentId={task.id}
+                    subtasks={task.subtasks}
+                    canAdd={!task.parent}
+                    onAdded={handleSubtaskAdded}
+                    onChanged={handleSubtaskChanged}
+                    onRemoved={handleSubtaskRemoved}
+                  />
+                </CardContent>
+              </Card>
+            )}
 
             <Card
               onDragOver={(e) => {
@@ -635,17 +702,32 @@ export default function TaskDetailPage() {
 
                 <Separator />
 
-                <div className="space-y-2">
-                  <label className={FIELD_LABEL} htmlFor="due">
-                    Due date
-                  </label>
-                  <Input
-                    id="due"
-                    type="date"
-                    value={toDateInput(task.dueDate)}
-                    onChange={(e) => patch({ dueDate: e.target.value || null })}
-                    className={cn(isOverdue && "border-destructive/50 text-destructive")}
-                  />
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="space-y-2">
+                    <label className={FIELD_LABEL} htmlFor="start">
+                      Start date
+                    </label>
+                    <Input
+                      id="start"
+                      type="date"
+                      value={toDateInput(task.startDate)}
+                      max={toDateInput(task.dueDate) || undefined}
+                      onChange={(e) => patch({ startDate: e.target.value || null })}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <label className={FIELD_LABEL} htmlFor="due">
+                      Due date
+                    </label>
+                    <Input
+                      id="due"
+                      type="date"
+                      value={toDateInput(task.dueDate)}
+                      min={toDateInput(task.startDate) || undefined}
+                      onChange={(e) => patch({ dueDate: e.target.value || null })}
+                      className={cn(isOverdue && "border-destructive/50 text-destructive")}
+                    />
+                  </div>
                 </div>
 
                 <Separator />
@@ -701,7 +783,7 @@ export default function TaskDetailPage() {
         open={isConfirmingDelete}
         onOpenChange={setIsConfirmingDelete}
         title="Delete this task?"
-        description={`"${task.title}" and its comments and attachments will be removed. This cannot be undone.`}
+        description={`"${task.title}" and its comments, attachments${task.subtasks.length > 0 ? " and subtasks" : ""} will be removed. This cannot be undone.`}
         confirmLabel="Delete task"
         destructive
         onConfirm={handleDelete}
@@ -724,10 +806,10 @@ export default function TaskDetailPage() {
 }
 
 /** Small pill for the counts in card titles. */
-function Count({ value }: { value: number }) {
+function Count({ value, label }: { value: number; label?: string }) {
   return (
     <span className="rounded-full bg-muted px-1.5 text-xs font-semibold tabular-nums text-muted-foreground">
-      {value}
+      {label ?? value}
     </span>
   );
 }

@@ -46,7 +46,9 @@ export function asProjectColor(value: string | null): ProjectColor | null {
 
 export function serializeProject(
   project: ProjectListRow,
-  doneCount: number = 0
+  doneCount: number = 0,
+  /** Least-privilege default — every real call site passes this explicitly. */
+  myRole: "VIEWER" | "EDITOR" = "VIEWER"
 ) {
   const { _count, color, ...rest } = project;
   return {
@@ -54,6 +56,7 @@ export function serializeProject(
     color: asProjectColor(color),
     taskCount: _count.tasks,
     doneCount,
+    myRole,
   };
 }
 

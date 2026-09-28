@@ -23,11 +23,16 @@ export const TASK_LIST_SELECT = {
   description: true,
   status: true,
   priority: true,
+  startDate: true,
   dueDate: true,
   order: true,
   projectId: true,
   assigneeId: true,
   createdById: true,
+  // Always null here — the board/list/calendar query filters to top-level
+  // tasks — but selected anyway so a list row satisfies the same `Task` shape
+  // the client code shares with the detail page.
+  parentId: true,
   createdAt: true,
   updatedAt: true,
   project: { select: PROJECT_SUMMARY },
@@ -36,11 +41,28 @@ export const TASK_LIST_SELECT = {
   _count: { select: { comments: true, attachments: true } },
 } satisfies Prisma.TaskSelect;
 
+/** What a parent task's checklist shows for one subtask. */
+const SUBTASK_SELECT = {
+  id: true,
+  title: true,
+  status: true,
+  priority: true,
+  assigneeId: true,
+  assignee: { select: USER_SUMMARY },
+  dueDate: true,
+  createdAt: true,
+} satisfies Prisma.TaskSelect;
+
 /** Full shape for the single-task detail page. */
 export const TASK_DETAIL_INCLUDE = {
   project: { select: PROJECT_SUMMARY },
   assignee: { select: USER_SUMMARY },
   createdBy: { select: USER_SUMMARY },
+  // Enough to link back to the task this one is filed under. Null on
+  // everything but a subtask.
+  parent: { select: { id: true, title: true } },
+  // Always empty when this task is itself a subtask — nesting is one level.
+  subtasks: { select: SUBTASK_SELECT, orderBy: { createdAt: "asc" } },
   comments: {
     include: { author: { select: USER_SUMMARY } },
     orderBy: { createdAt: "desc" },
@@ -91,6 +113,8 @@ export function serializeTaskRow(task: TaskListRow) {
     comments: [],
     attachments: [],
     tags: [],
+    parent: null,
+    subtasks: [],
   };
 }
 

@@ -26,7 +26,7 @@ export async function GET(request: Request) {
     } satisfies SearchResponse);
   }
 
-  const { results, hasMore } = await searchTasks(query);
+  const { results, hasMore } = await searchTasks(query, guard.user);
 
   return NextResponse.json({ query, results, hasMore } satisfies SearchResponse);
 }
