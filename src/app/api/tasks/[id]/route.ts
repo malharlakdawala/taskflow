@@ -107,6 +107,7 @@ export async function PATCH(
   if (title !== undefined) beforeSelect.title = true;
   if (status !== undefined) beforeSelect.status = true;
   if (priority !== undefined) beforeSelect.priority = true;
+  if (startDate !== undefined) beforeSelect.startDate = true;
   if (dueDate !== undefined) beforeSelect.dueDate = true;
 
   const before = (await prisma.task.findUnique({
@@ -119,8 +120,13 @@ export async function PATCH(
   // somewhere else — EDITOR on the destination too. Reparenting inherits its
   // check from the parent's project via `data.projectId` above, so this one
   // check covers both paths.
+  //
+  // No access at all (404) collapses to the same "Task not found" GET would
+  // give — but a VIEWER's 403 is forwarded as-is: they already know the task
+  // exists (they can see it), so lying about that would just be confusing,
+  // not protective.
   const currentAccess = await requireTaskProjectRole(guard.user, before.projectId, "EDITOR");
-  if (currentAccess) return notFound();
+  if (currentAccess) return currentAccess.status === 404 ? notFound() : currentAccess;
   if (data.projectId !== undefined) {
     const destinationAccess = await requireTaskProjectRole(
       guard.user,
@@ -197,8 +203,10 @@ export async function DELETE(
   });
   if (!existing) return notFound();
 
+  // Same rule as PATCH: hide a task this member has no access to at all, but
+  // don't lie to a VIEWER who can already see it.
   const rejection = await requireTaskProjectRole(guard.user, existing.projectId, "EDITOR");
-  if (rejection) return notFound();
+  if (rejection) return rejection.status === 404 ? notFound() : rejection;
 
   try {
     await prisma.task.delete({ where: { id } });

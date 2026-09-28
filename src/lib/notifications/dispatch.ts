@@ -285,6 +285,7 @@ export interface TaskSnapshot {
   title?: string;
   status?: TaskStatus;
   priority?: TaskPriority;
+  startDate?: Date | null;
   dueDate?: Date | null;
 }
 
@@ -320,6 +321,17 @@ export function summarizeTaskChanges(
       label: "Priority",
       value: PRIORITY_ITEMS[after.priority] ?? after.priority,
     });
+  }
+
+  if (before.startDate !== undefined && after.startDate !== undefined) {
+    const from = before.startDate?.getTime() ?? null;
+    const to = after.startDate?.getTime() ?? null;
+    if (from !== to) {
+      changes.push({
+        label: "Start date",
+        value: formatDate(after.startDate) ?? "cleared",
+      });
+    }
   }
 
   if (before.dueDate !== undefined && after.dueDate !== undefined) {
@@ -362,6 +374,12 @@ export function describeTaskValues(next: TaskSnapshot): TaskChange[] {
     changes.push({
       label: "Priority",
       value: PRIORITY_ITEMS[next.priority] ?? next.priority,
+    });
+  }
+  if (next.startDate !== undefined) {
+    changes.push({
+      label: "Start date",
+      value: formatDate(next.startDate ?? null) ?? "cleared",
     });
   }
   if (next.dueDate !== undefined) {

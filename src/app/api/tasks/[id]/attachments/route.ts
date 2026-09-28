@@ -2,8 +2,12 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { createClient } from "@/lib/supabase/server";
 import { requireMember } from "@/lib/auth";
+import { requireTaskProjectRole } from "@/lib/project-access";
 import { MAX_UPLOAD_BYTES, uploadToBucket } from "@/lib/storage";
 import { createAttachmentSchema, formatZodError } from "@/lib/validation";
+
+const notFound = () =>
+  NextResponse.json({ error: "Task not found" }, { status: 404 });
 
 /**
  * Attaches a file to a task, two ways:
@@ -23,32 +27,27 @@ export async function POST(
 
   const { id } = await params;
 
+  // Attaching a file is a write on the task, same bar as editing it — a
+  // VIEWER can look but not add to it.
+  const task = await prisma.task.findUnique({
+    where: { id },
+    select: { projectId: true },
+  });
+  if (!task) return notFound();
+
+  const rejection = await requireTaskProjectRole(guard.user, task.projectId, "EDITOR");
+  if (rejection) return rejection.status === 404 ? notFound() : rejection;
+
   if (request.headers.get("content-type")?.includes("application/json")) {
     const parsed = createAttachmentSchema.safeParse(await request.json());
     if (!parsed.success) {
       return NextResponse.json(formatZodError(parsed.error), { status: 400 });
     }
 
-    const task = await prisma.task.findUnique({
-      where: { id },
-      select: { id: true },
-    });
-    if (!task) {
-      return NextResponse.json({ error: "Task not found" }, { status: 404 });
-    }
-
     const attachment = await prisma.attachment.create({
       data: { ...parsed.data, taskId: id },
     });
     return NextResponse.json(attachment, { status: 201 });
-  }
-
-  const task = await prisma.task.findUnique({
-    where: { id },
-    select: { id: true },
-  });
-  if (!task) {
-    return NextResponse.json({ error: "Task not found" }, { status: 404 });
   }
 
   const formData = await request.formData();

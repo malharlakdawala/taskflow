@@ -146,18 +146,29 @@ async function resolveAssignee(email: string | undefined): Promise<string | null
  * person would. Matching is case-insensitive, exactly as the unique index is,
  * so "website" finds "Website".
  *
+ * Scoped to what `actor` can see at all (VIEWER or above) — a project they
+ * have zero access to has to read as "no project by that name", the same as
+ * one that genuinely doesn't exist. Resolving it first and only rejecting
+ * afterward, in a caller that checks EDITOR access, would let a token holder
+ * learn a restricted project exists (and its exact name) just from which of
+ * the two error messages comes back.
+ *
  * `forFiling` is the difference between reading and writing. Filtering a list
  * by an archived project is reasonable; putting new work into one is almost
  * certainly a mistake, because archived projects have left every picker.
  */
 async function resolveProject(
+  actor: AppUser,
   name: string | undefined,
   { forFiling = false }: { forFiling?: boolean } = {}
 ): Promise<string | null> {
   if (!name) return null;
 
   const project = await prisma.project.findFirst({
-    where: { name: { equals: name, mode: "insensitive" } },
+    where: {
+      name: { equals: name, mode: "insensitive" },
+      ...accessibleProjectsFilter(actor),
+    },
     select: { id: true, name: true, archived: true },
   });
 
@@ -221,7 +232,7 @@ const createTask: McpTool = {
     };
 
     const assigneeId = await resolveAssignee(input.assignee_email);
-    const projectId = await resolveProject(input.project, { forFiling: true });
+    const projectId = await resolveProject(actor, input.project, { forFiling: true });
     await requireProjectAccess(actor, projectId, "EDITOR");
     const status = input.status ?? "TODO";
 
@@ -311,10 +322,13 @@ const listTasks: McpTool = {
     const assigneeId = input.mine
       ? actor.id
       : await resolveAssignee(input.assignee_email);
-    const projectId = await resolveProject(input.project);
+    const projectId = await resolveProject(actor, input.project);
 
     const tasks = await prisma.task.findMany({
       where: {
+        // Subtasks are reached through get_task on their parent, not listed
+        // here — same as the board, list and calendar.
+        parentId: null,
         ...(input.status && { status: input.status }),
         ...(input.priority && { priority: input.priority }),
         ...(assigneeId && { assigneeId }),
@@ -452,7 +466,7 @@ const updateTask: McpTool = {
     let nextProjectId: string | null | undefined;
     if (input.project !== undefined) {
       nextProjectId = input.project
-        ? await resolveProject(input.project, { forFiling: true })
+        ? await resolveProject(actor, input.project, { forFiling: true })
         : null;
       data.projectId = nextProjectId;
     }
@@ -470,6 +484,7 @@ const updateTask: McpTool = {
     if (input.title !== undefined) beforeSelect.title = true;
     if (input.status !== undefined) beforeSelect.status = true;
     if (input.priority !== undefined) beforeSelect.priority = true;
+    if (input.start_date !== undefined) beforeSelect.startDate = true;
     if (input.due_date !== undefined) beforeSelect.dueDate = true;
 
     const before = ((await prisma.task.findUnique({
@@ -518,6 +533,7 @@ const updateTask: McpTool = {
       title: input.title,
       status: input.status,
       priority: input.priority,
+      ...(input.start_date !== undefined && { startDate: parseDate(input.start_date) }),
       ...(input.due_date !== undefined && { dueDate: parseDate(input.due_date) }),
     });
     if (changes.length > 0) {

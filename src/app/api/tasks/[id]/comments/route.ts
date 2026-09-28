@@ -1,10 +1,14 @@
 import { NextResponse, after } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireMember } from "@/lib/auth";
+import { requireTaskProjectRole } from "@/lib/project-access";
 import { sanitizeOrNull } from "@/lib/sanitize";
 import { createCommentSchema, formatZodError } from "@/lib/validation";
 import { serializeComment } from "@/lib/tasks";
 import { notifyCommentAdded } from "@/lib/notifications/dispatch";
+
+const notFound = () =>
+  NextResponse.json({ error: "Task not found" }, { status: 404 });
 
 export async function GET(
   request: Request,
@@ -14,6 +18,15 @@ export async function GET(
   if (!guard.ok) return guard.response;
 
   const { id } = await params;
+
+  const task = await prisma.task.findUnique({
+    where: { id },
+    select: { projectId: true },
+  });
+  if (!task) return notFound();
+
+  const rejection = await requireTaskProjectRole(guard.user, task.projectId, "VIEWER");
+  if (rejection) return notFound();
 
   const comments = await prisma.comment.findMany({
     where: { taskId: id },
@@ -42,11 +55,16 @@ export async function POST(
 
   const task = await prisma.task.findUnique({
     where: { id },
-    select: { id: true },
+    select: { projectId: true },
   });
-  if (!task) {
-    return NextResponse.json({ error: "Task not found" }, { status: 404 });
-  }
+  if (!task) return notFound();
+
+  // Commenting is a write, so it needs the same EDITOR bar as any other
+  // change to the task — a VIEWER can read the thread but not add to it. No
+  // access at all reads as "not found"; a VIEWER's 403 is shown as-is, since
+  // they can already see the task and a 404 would just be a confusing lie.
+  const rejection = await requireTaskProjectRole(guard.user, task.projectId, "EDITOR");
+  if (rejection) return rejection.status === 404 ? notFound() : rejection;
 
   const content = sanitizeOrNull(parsed.data.content);
   if (!content) {

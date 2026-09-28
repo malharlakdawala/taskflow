@@ -73,11 +73,21 @@ export async function PATCH(request: Request) {
   if (status !== undefined) beforeSelect.status = true;
   if (priority !== undefined) beforeSelect.priority = true;
   if (dueDate !== undefined) beforeSelect.dueDate = true;
+  // Only needed to enforce the subtask-project invariant below, so only read
+  // when a refile is actually part of this request.
+  if (projectId !== undefined) beforeSelect.parentId = true;
 
   const before = (await prisma.task.findMany({
     where: { id: { in: ids } },
     select: beforeSelect,
-  })) as Array<TaskSnapshot & { id: string; assigneeId?: string | null; projectId: string | null }>;
+  })) as Array<
+    TaskSnapshot & {
+      id: string;
+      assigneeId?: string | null;
+      projectId: string | null;
+      parentId?: string | null;
+    }
+  >;
 
   const accessRejection = await forbiddenProject(
     guard.user,
@@ -87,6 +97,17 @@ export async function PATCH(request: Request) {
   if (projectId !== undefined) {
     const destinationRejection = await requireTaskProjectRole(guard.user, projectId, "EDITOR");
     if (destinationRejection) return destinationRejection;
+
+    // A subtask is filed wherever its parent is — never separately. The list
+    // view never selects one (subtasks aren't listed there), so this only
+    // fires against a stale or tampered payload, same threat model as
+    // forbiddenProject() above.
+    if (before.some((task) => task.parentId)) {
+      return NextResponse.json(
+        { error: "Subtasks can't be refiled independently of their parent" },
+        { status: 400 }
+      );
+    }
   }
 
   // Which rows are genuinely changing hands. Comparing in JS rather than with
