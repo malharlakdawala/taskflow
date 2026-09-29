@@ -6,6 +6,7 @@ import {
   clearDemoContent,
   seedDemoContent,
 } from "@/lib/demo-data";
+import { reportError } from "@/lib/report-error";
 
 /**
  * Puts the public demo back the way it was.
@@ -67,6 +68,7 @@ export async function GET(request: Request) {
     return NextResponse.json({ success: true, tasks, comments, projects });
   } catch (error) {
     console.error("[cron] demo reset failed:", error);
+    reportError("cron.demo-reset", error);
     return NextResponse.json({ error: "Reset failed" }, { status: 500 });
   }
 }

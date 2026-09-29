@@ -3,6 +3,7 @@ import "server-only";
 import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
 import { prisma } from "@/lib/prisma";
 import type { AppUser } from "@/lib/auth";
+import { reportError } from "@/lib/report-error";
 
 /**
  * Personal access tokens for the hosted MCP endpoint.
@@ -110,7 +111,10 @@ export async function userForToken(token: string): Promise<AppUser | null> {
     // Best-effort: a failed bookkeeping write must not fail the call.
     prisma.apiToken
       .update({ where: { id: record.id }, data: { lastUsedAt: new Date() } })
-      .catch((error) => console.error("[mcp] could not stamp token use:", error));
+      .catch((error) => {
+        console.error("[mcp] could not stamp token use:", error);
+        reportError("mcp.token-stamp", error);
+      });
   }
 
   return record.user;

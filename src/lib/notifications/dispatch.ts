@@ -24,6 +24,7 @@ import {
 import { toPlainText } from "@/lib/utils";
 import { PRIORITY_ITEMS, STATUS_ITEMS } from "@/lib/types";
 import type { TaskPriority, TaskStatus } from "@/generated/prisma/enums";
+import { reportError } from "@/lib/report-error";
 
 /**
  * Decides who hears about what, and over which channel.
@@ -189,6 +190,7 @@ export async function notifyTaskAssigned({
     });
   } catch (error) {
     console.error("[notify] task-assigned failed:", error);
+    reportError("notify.task-assigned", error);
   }
 }
 
@@ -268,6 +270,7 @@ export async function notifyTasksAssigned({
     });
   } catch (error) {
     console.error("[notify] bulk-assignment failed:", error);
+    reportError("notify.bulk-assignment", error);
   }
 }
 
@@ -451,6 +454,7 @@ export async function notifyTaskUpdated({
     );
   } catch (error) {
     console.error("[notify] task-updated failed:", error);
+    reportError("notify.task-updated", error);
   }
 }
 
@@ -526,6 +530,7 @@ export async function notifyTasksUpdated({
     await recordNotifications(drafts);
   } catch (error) {
     console.error("[notify] bulk-update failed:", error);
+    reportError("notify.bulk-update", error);
   }
 }
 
@@ -605,6 +610,7 @@ export async function notifyCommentAdded({
     });
   } catch (error) {
     console.error("[notify] comment failed:", error);
+    reportError("notify.comment", error);
   }
 }
 
@@ -662,6 +668,7 @@ export async function sendWorkspaceInvite({
     });
   } catch (error) {
     console.error("[notify] invitation failed:", error);
+    reportError("notify.invitation", error);
     return false;
   }
 }
@@ -716,6 +723,7 @@ export async function notifyAccountApproved({
     });
   } catch (error) {
     console.error("[notify] approval failed:", error);
+    reportError("notify.approval", error);
   }
 }
 

@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { requireAdmin } from "@/lib/auth";
 import { updateMemberSchema, formatZodError } from "@/lib/validation";
 import { notifyAccountApproved } from "@/lib/notifications/dispatch";
+import { reportError } from "@/lib/report-error";
 
 /**
  * Approve, reject, revoke, or change the role of a member. Admin only.
@@ -88,9 +89,10 @@ export async function PATCH(
           where: { email: member.email, acceptedAt: null },
           data: { acceptedAt: new Date() },
         })
-        .catch((error) =>
-          console.error("[members] could not close invitation:", error)
-        )
+        .catch((error) => {
+          console.error("[members] could not close invitation:", error);
+          reportError("members.close-invitation", error);
+        })
     );
   }
 
