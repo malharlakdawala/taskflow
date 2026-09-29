@@ -3,6 +3,7 @@ import "server-only";
 import { prisma } from "@/lib/prisma";
 import type { NotificationType } from "@/generated/prisma/enums";
 import { toPlainText } from "@/lib/utils";
+import { reportError } from "@/lib/report-error";
 
 /**
  * Writing the in-app feed.
@@ -50,6 +51,7 @@ export async function recordNotifications(
     });
   } catch (error) {
     console.error("[notifications] could not record:", error);
+    reportError("notifications.record", error);
   }
 }
 

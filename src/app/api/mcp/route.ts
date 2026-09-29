@@ -3,6 +3,7 @@ import { z } from "zod";
 import type { AppUser } from "@/lib/auth";
 import { bearerToken, userForToken } from "@/lib/mcp/tokens";
 import { McpToolError, TOOLS, TOOLS_BY_NAME } from "@/lib/mcp/tools";
+import { reportError } from "@/lib/report-error";
 
 /**
  * TaskFlow as a remote MCP server.
@@ -231,6 +232,7 @@ async function callTool(id: Id, message: RpcRequest, actor: AppUser) {
     // An unexpected failure is ours, not the model's. Log it in full and hand
     // back something that doesn't leak internals into a context window.
     console.error(`[mcp] ${name} failed for ${actor.email}:`, error);
+    reportError(`mcp.tool.${name}`, error);
     return rpcError(id, INTERNAL_ERROR, `${name} failed. Try again.`);
   }
 }

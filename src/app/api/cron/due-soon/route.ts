@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { notifyDueSoon } from "@/lib/notifications/dispatch";
+import { reportError } from "@/lib/report-error";
 
 /**
  * Daily digest of overdue and soon-due tasks, one email per assignee.
@@ -38,6 +39,7 @@ export async function GET(request: Request) {
     return NextResponse.json({ success: true, ...result });
   } catch (error) {
     console.error("[cron] due-soon digest failed:", error);
+    reportError("cron.due-soon", error);
     return NextResponse.json(
       { error: "Digest failed" },
       { status: 500 }

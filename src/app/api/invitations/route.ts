@@ -17,6 +17,7 @@ import {
   sendWorkspaceInvite,
 } from "@/lib/notifications/dispatch";
 import type { InviteResult } from "@/lib/types";
+import { reportError } from "@/lib/report-error";
 
 /**
  * Invitations. Admin only.
@@ -99,6 +100,7 @@ export async function POST(request: Request) {
       results.push(await inviteOne({ email, role, adminId: guard.user.id }));
     } catch (error) {
       console.error(`[invitations] ${email} failed:`, error);
+      reportError("invitations.invite", error);
       results.push({
         email,
         outcome: "failed",

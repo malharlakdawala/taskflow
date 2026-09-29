@@ -1,4 +1,5 @@
 import "server-only";
+import { reportError } from "@/lib/report-error";
 
 /**
  * Transactional email via Brevo's HTTP API.
@@ -105,12 +106,17 @@ export async function sendEmail(message: EmailMessage): Promise<boolean> {
       console.error(
         `[email] Brevo rejected the send (${response.status}): ${detail.slice(0, 500)}`
       );
+      reportError(
+        "email.brevo-rejected",
+        new Error(`Brevo rejected the send (${response.status}): ${detail.slice(0, 200)}`)
+      );
       return false;
     }
 
     return true;
   } catch (error) {
     console.error("[email] Could not reach Brevo:", error);
+    reportError("email.brevo-unreachable", error);
     return false;
   }
 }
