@@ -10,6 +10,7 @@ import {
   ArchiveRestore,
   FolderPlus,
   GanttChartSquare,
+  KeyRound,
   Pencil,
   Plus,
   Trash2,
@@ -193,6 +194,14 @@ export default function ProjectsPage() {
               >
                 <Users className="mr-1 h-3.5 w-3.5" />
                 Members
+              </Button>
+              <Button
+                size="sm"
+                variant="ghost"
+                render={<Link href={`/projects/${project.id}/vault`} />}
+              >
+                <KeyRound className="mr-1 h-3.5 w-3.5" />
+                Vault
               </Button>
               <Button
                 size="sm"

@@ -208,6 +208,38 @@ export const createAttachmentSchema = z.object({
   mimeType: z.string().min(1).max(255),
 });
 
+/**
+ * `password` is intentionally not validated for strength or format — a vault
+ * entry stores whatever credential a real external service actually issued,
+ * which is not this app's to have opinions about.
+ */
+export const createVaultEntrySchema = z.object({
+  name: z.string().trim().min(1, "Name is required").max(200),
+  username: z.string().trim().max(200).nullish(),
+  password: z.string().max(2000).nullish(),
+  url: z.string().trim().max(500).nullish(),
+  notes: z.string().trim().max(2000).nullish(),
+});
+
+/**
+ * `password` absent means "leave it alone" — the same convention as every
+ * other optional field here — which is why there is no way to tell this
+ * schema "clear the password" short of setting a new one. A credential with
+ * no credential in it isn't a meaningful state to support.
+ */
+export const updateVaultEntrySchema = z
+  .object({
+    name: z.string().trim().min(1, "Name is required").max(200),
+    username: z.string().trim().max(200).nullable(),
+    password: z.string().max(2000),
+    url: z.string().trim().max(500).nullable(),
+    notes: z.string().trim().max(2000).nullable(),
+  })
+  .partial()
+  .refine((data) => Object.keys(data).length > 0, {
+    message: "No fields to update",
+  });
+
 /** Turns a Zod failure into a 400-shaped payload. */
 export function formatZodError(error: z.ZodError) {
   return {
