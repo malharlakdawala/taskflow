@@ -92,6 +92,7 @@ model User {
   tasks           Task[]           @relation("TaskAssignee")
   createdTasks    Task[]           @relation("TaskCreatedBy")
   createdProjects Project[]        @relation("ProjectCreatedBy")
+  createdVaultEntries VaultEntry[] @relation("VaultEntryCreatedBy")
   projectMemberships ProjectMember[]
   comments        Comment[]
   notifications   Notification[]  @relation("NotificationRecipient")
@@ -150,8 +151,35 @@ model Project {
   /// this entirely — see `taskflow.is_admin()`. A task with no project is
   /// unfiled and stays visible to every active member regardless.
   members     ProjectMember[]
+  vaultEntries VaultEntry[]
   createdAt   DateTime        @default(now()) @db.Timestamptz(6)
   updatedAt   DateTime        @updatedAt @db.Timestamptz(6)
+}
+
+/// A stored credential, filed under a project — deliberately no "unfiled"
+/// bucket, unlike Task. Gated at EDITOR, not VIEWER: seeing a task is not the
+/// same bar as seeing a password, so a project's read-only members never see
+/// this at all.
+///
+/// `secret` is application-layer encrypted (AES-256-GCM, see
+/// src/lib/vault-crypto.ts) before it ever reaches this column — the database
+/// itself never holds a plaintext credential. Decryption happens only on an
+/// explicit reveal request, never as part of a list.
+model VaultEntry {
+  id          String   @id @default(uuid()) @db.Uuid
+  projectId   String   @db.Uuid
+  project     Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  name        String
+  username    String?
+  secret      String?
+  url         String?
+  notes       String?
+  createdById String?  @db.Uuid
+  createdBy   User?    @relation("VaultEntryCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  createdAt   DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt   DateTime @updatedAt @db.Timestamptz(6)
+
+  @@index([projectId], map: "VaultEntry_projectId_idx")
 }
 
 enum ProjectRole {

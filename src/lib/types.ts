@@ -261,6 +261,25 @@ export interface TaskTag {
   tag: Tag;
 }
 
+/**
+ * A stored credential. The password itself is never part of this shape —
+ * `hasPassword` is all a list ever carries; the plaintext comes back only
+ * from the reveal endpoint, one entry at a time, on request.
+ */
+export interface VaultEntry {
+  id: string;
+  projectId: string;
+  name: string;
+  username: string | null;
+  url: string | null;
+  notes: string | null;
+  hasPassword: boolean;
+  createdById: string | null;
+  createdBy: User | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export const STATUS_CONFIG: Record<TaskStatus, { label: string; color: string }> = {
   BACKLOG: { label: "Backlog", color: "bg-gray-500" },
   TODO: { label: "To Do", color: "bg-blue-500" },
