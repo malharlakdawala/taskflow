@@ -8,6 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { VaultEntryDialog } from "@/components/projects/vault-entry-dialog";
+import { VaultEntryDetailDialog } from "@/components/projects/vault-entry-detail-dialog";
 import { VaultEntryRow, matchesVaultQuery } from "@/components/projects/vault-entry-row";
 import { ProjectDot } from "@/components/projects/project-badge";
 import { useProjects } from "@/lib/use-projects";
@@ -29,6 +30,7 @@ export default function VaultPage() {
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [editing, setEditing] = useState<VaultEntry | null>(null);
   const [deleting, setDeleting] = useState<VaultEntry | null>(null);
+  const [viewing, setViewing] = useState<VaultEntry | null>(null);
   // Same remount-on-open trick as the per-project vault page and every other
   // dialog in this codebase — see that page's own note.
   const [dialogKey, setDialogKey] = useState(0);
@@ -199,6 +201,7 @@ export default function VaultPage() {
                       <VaultEntryRow
                         key={`${entry.id}:${entry.updatedAt}`}
                         entry={entry}
+                        onView={setViewing}
                         onEdit={openEdit}
                         onDelete={setDeleting}
                       />
@@ -216,6 +219,12 @@ export default function VaultPage() {
         onOpenChange={setIsDialogOpen}
         entry={editing}
         onSaved={handleSaved}
+      />
+
+      <VaultEntryDetailDialog
+        entry={viewing}
+        open={viewing !== null}
+        onOpenChange={(open) => !open && setViewing(null)}
       />
 
       <ConfirmDialog

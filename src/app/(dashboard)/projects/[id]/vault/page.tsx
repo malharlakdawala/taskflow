@@ -9,6 +9,7 @@ import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { VaultEntryDialog } from "@/components/projects/vault-entry-dialog";
+import { VaultEntryDetailDialog } from "@/components/projects/vault-entry-detail-dialog";
 import { VaultEntryRow, matchesVaultQuery } from "@/components/projects/vault-entry-row";
 import { ProjectDot } from "@/components/projects/project-badge";
 import { notify } from "@/lib/notify";
@@ -26,6 +27,7 @@ export default function ProjectVaultPage() {
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [editing, setEditing] = useState<VaultEntry | null>(null);
   const [deleting, setDeleting] = useState<VaultEntry | null>(null);
+  const [viewing, setViewing] = useState<VaultEntry | null>(null);
   // Bumped on every open so VaultEntryDialog remounts with fresh fields —
   // same reason CreateTaskDialog and ProjectDialog do this rather than
   // re-syncing state from props in an effect.
@@ -219,6 +221,7 @@ export default function ProjectVaultPage() {
               <VaultEntryRow
                 key={`${entry.id}:${entry.updatedAt}`}
                 entry={entry}
+                onView={setViewing}
                 onEdit={openEdit}
                 onDelete={setDeleting}
               />
@@ -234,6 +237,12 @@ export default function ProjectVaultPage() {
         projectId={projectId}
         entry={editing}
         onSaved={handleSaved}
+      />
+
+      <VaultEntryDetailDialog
+        entry={viewing}
+        open={viewing !== null}
+        onOpenChange={(open) => !open && setViewing(null)}
       />
 
       <ConfirmDialog
