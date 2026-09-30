@@ -41,6 +41,22 @@ export function serializeVaultEntry(entry: VaultEntryRow) {
   return { ...rest, hasPassword: secret !== null };
 }
 
+/** Same shape, plus which project each entry belongs to — for the
+ * workspace-wide vault view, which spans every project the caller edits. */
+export const VAULT_ENTRY_SELECT_WITH_PROJECT = {
+  ...VAULT_ENTRY_SELECT,
+  project: { select: { id: true, name: true, color: true, archived: true } },
+} satisfies Prisma.VaultEntrySelect;
+
+type VaultEntryWithProjectRow = Prisma.VaultEntryGetPayload<{
+  select: typeof VAULT_ENTRY_SELECT_WITH_PROJECT;
+}>;
+
+export function serializeVaultEntryWithProject(entry: VaultEntryWithProjectRow) {
+  const { secret, ...rest } = entry;
+  return { ...rest, hasPassword: secret !== null };
+}
+
 const notFound = () =>
   NextResponse.json({ error: "Vault entry not found" }, { status: 404 });
 

@@ -76,6 +76,16 @@ export function accessibleProjectsFilter(user: AppUser): Prisma.ProjectWhereInpu
 }
 
 /**
+ * Narrower than `accessibleProjectsFilter` — VIEWER is excluded, since this
+ * is what gates the vault. Used to scope the workspace-wide vault view to
+ * exactly the projects whose vault the caller could open individually.
+ */
+export function editableProjectsFilter(user: AppUser): Prisma.ProjectWhereInput {
+  if (user.role === "ADMIN") return {};
+  return { members: { some: { userId: user.id, role: "EDITOR" } } };
+}
+
+/**
  * `where` clause restricting a Task query to what this user may see: unfiled
  * tasks, plus tasks in a project they belong to.
  */

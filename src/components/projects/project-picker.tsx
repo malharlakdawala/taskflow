@@ -25,11 +25,14 @@ export function ProjectPicker({
    * "Set project" while still offering unfiling as a destination.
    */
   placeholder = NO_PROJECT_LABEL,
+  /** False for a picker whose target always requires a project — the vault, which has no unfiled bucket. */
+  allowNone = true,
 }: {
   value: string | null;
   onChange: (projectId: string | null) => void;
   disabled?: boolean;
   placeholder?: string;
+  allowNone?: boolean;
 }) {
   const { projects, isLoading } = useProjects();
 
@@ -51,10 +54,10 @@ export function ProjectPicker({
   // Without this map Base UI renders the raw value, which would show the
   // sentinel and bare uuids in the trigger.
   const items = useMemo(() => {
-    const map: Record<string, string> = { [NO_PROJECT]: NO_PROJECT_LABEL };
+    const map: Record<string, string> = allowNone ? { [NO_PROJECT]: NO_PROJECT_LABEL } : {};
     for (const project of selectable) map[project.id] = project.name;
     return map;
-  }, [selectable]);
+  }, [selectable, allowNone]);
 
   return (
     <Select
@@ -75,7 +78,7 @@ export function ProjectPicker({
         )}
       </SelectTrigger>
       <SelectContent>
-        <SelectItem value={NO_PROJECT}>{NO_PROJECT_LABEL}</SelectItem>
+        {allowNone && <SelectItem value={NO_PROJECT}>{NO_PROJECT_LABEL}</SelectItem>}
         {selectable.map((project) => (
           <SelectItem key={project.id} value={project.id}>
             <span className="flex min-w-0 items-center gap-2">

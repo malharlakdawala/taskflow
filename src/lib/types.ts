@@ -278,6 +278,8 @@ export interface VaultEntry {
   createdBy: User | null;
   createdAt: string;
   updatedAt: string;
+  /** Only present from the workspace-wide vault view, which spans projects. */
+  project?: ProjectSummary;
 }
 
 export const STATUS_CONFIG: Record<TaskStatus, { label: string; color: string }> = {

@@ -9,6 +9,7 @@ import {
   List,
   Calendar,
   FolderKanban,
+  KeyRound,
   Settings,
   LogOut,
   Moon,
@@ -30,6 +31,7 @@ const navigation = [
   { name: "List", href: "/list", icon: List },
   { name: "Calendar", href: "/calendar", icon: Calendar },
   { name: "Projects", href: "/projects", icon: FolderKanban },
+  { name: "Vault", href: "/vault", icon: KeyRound },
 ];
 
 export function Sidebar({ user }: { user: SessionUser }) {
