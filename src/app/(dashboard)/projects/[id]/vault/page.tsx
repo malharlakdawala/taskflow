@@ -3,25 +3,14 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
-import {
-  ArrowLeft,
-  Copy,
-  Eye,
-  EyeOff,
-  FolderX,
-  KeyRound,
-  Loader2,
-  Pencil,
-  Plus,
-  Trash2,
-} from "lucide-react";
+import { ArrowLeft, FolderX, KeyRound, Plus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { VaultEntryDialog } from "@/components/projects/vault-entry-dialog";
+import { VaultEntryRow } from "@/components/projects/vault-entry-row";
 import { ProjectDot } from "@/components/projects/project-badge";
 import { notify } from "@/lib/notify";
-import { displayName } from "@/lib/utils";
 import type { Project, VaultEntry } from "@/lib/types";
 
 export default function ProjectVaultPage() {
@@ -40,10 +29,6 @@ export default function ProjectVaultPage() {
   // same reason CreateTaskDialog and ProjectDialog do this rather than
   // re-syncing state from props in an effect.
   const [dialogKey, setDialogKey] = useState(0);
-
-  /** Revealed plaintext, by entry id — never persisted, cleared on unmount. */
-  const [revealed, setRevealed] = useState<Record<string, string>>({});
-  const [revealing, setRevealing] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -97,12 +82,6 @@ export default function ProjectVaultPage() {
       const exists = prev.some((e) => e.id === entry.id);
       return exists ? prev.map((e) => (e.id === entry.id ? entry : e)) : [...prev, entry];
     });
-    // A changed password invalidates whatever was on screen.
-    setRevealed((prev) => {
-      const next = { ...prev };
-      delete next[entry.id];
-      return next;
-    });
   };
 
   const handleDelete = async (entry: VaultEntry) => {
@@ -113,44 +92,6 @@ export default function ProjectVaultPage() {
       notify.success(`${entry.name} deleted`);
     } catch {
       notify.error("Could not delete credential");
-    }
-  };
-
-  const toggleReveal = async (entry: VaultEntry) => {
-    if (revealed[entry.id] !== undefined) {
-      setRevealed((prev) => {
-        const next = { ...prev };
-        delete next[entry.id];
-        return next;
-      });
-      return;
-    }
-    if (!entry.hasPassword) return;
-
-    setRevealing(entry.id);
-    try {
-      const response = await fetch(`/api/vault/${entry.id}/reveal`, { method: "POST" });
-      const body = await response.json();
-      if (!response.ok) throw new Error(body?.error ?? "Could not reveal password");
-      setRevealed((prev) => ({ ...prev, [entry.id]: body.password ?? "" }));
-    } catch (error) {
-      notify.error(
-        "Could not reveal password",
-        error instanceof Error ? error.message : undefined
-      );
-    } finally {
-      setRevealing(null);
-    }
-  };
-
-  const copyPassword = async (entry: VaultEntry) => {
-    const value = revealed[entry.id];
-    if (value === undefined) return;
-    try {
-      await navigator.clipboard.writeText(value);
-      notify.success("Password copied");
-    } catch {
-      notify.error("Could not copy — your browser blocked clipboard access");
     }
   };
 
@@ -248,104 +189,14 @@ export default function ProjectVaultPage() {
           </div>
         ) : (
           <div className="mx-auto max-w-3xl space-y-2">
-            {entries.map((entry) => {
-              const isRevealed = revealed[entry.id] !== undefined;
-              const isRevealing = revealing === entry.id;
-
-              return (
-                <div key={entry.id} className="rounded-xl border bg-card p-4">
-                  <div className="flex items-start justify-between gap-3">
-                    <div className="min-w-0 flex-1">
-                      <div className="flex items-center gap-2">
-                        <h3 className="truncate font-medium">{entry.name}</h3>
-                        {entry.url && (
-                          <a
-                            href={entry.url}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="truncate text-xs text-muted-foreground hover:text-primary hover:underline"
-                          >
-                            {entry.url}
-                          </a>
-                        )}
-                      </div>
-
-                      <div className="mt-2 grid gap-1.5 text-sm sm:grid-cols-2">
-                        {entry.username && (
-                          <div className="flex items-center gap-1.5">
-                            <span className="text-xs text-muted-foreground">User:</span>
-                            <span className="font-mono text-xs">{entry.username}</span>
-                          </div>
-                        )}
-                        {entry.hasPassword && (
-                          <div className="flex items-center gap-1.5">
-                            <span className="text-xs text-muted-foreground">Pass:</span>
-                            <span className="font-mono text-xs">
-                              {isRevealed ? revealed[entry.id] : "••••••••"}
-                            </span>
-                            <button
-                              type="button"
-                              aria-label={isRevealed ? "Hide password" : "Reveal password"}
-                              onClick={() => toggleReveal(entry)}
-                              disabled={isRevealing}
-                              className="rounded p-0.5 text-muted-foreground hover:text-foreground"
-                            >
-                              {isRevealing ? (
-                                <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                              ) : isRevealed ? (
-                                <EyeOff className="h-3.5 w-3.5" />
-                              ) : (
-                                <Eye className="h-3.5 w-3.5" />
-                              )}
-                            </button>
-                            {isRevealed && (
-                              <button
-                                type="button"
-                                aria-label="Copy password"
-                                onClick={() => copyPassword(entry)}
-                                className="rounded p-0.5 text-muted-foreground hover:text-foreground"
-                              >
-                                <Copy className="h-3.5 w-3.5" />
-                              </button>
-                            )}
-                          </div>
-                        )}
-                      </div>
-
-                      {entry.notes && (
-                        <p className="mt-2 whitespace-pre-wrap text-xs text-muted-foreground">
-                          {entry.notes}
-                        </p>
-                      )}
-
-                      <p className="mt-2 text-[11px] text-muted-foreground">
-                        Added by {entry.createdBy ? displayName(entry.createdBy) : "someone no longer here"}
-                      </p>
-                    </div>
-
-                    <div className="flex shrink-0 items-center gap-1">
-                      <Button
-                        size="icon"
-                        variant="ghost"
-                        aria-label={`Edit ${entry.name}`}
-                        onClick={() => openEdit(entry)}
-                      >
-                        <Pencil className="h-4 w-4" />
-                      </Button>
-                      <Button
-                        size="icon"
-                        variant="ghost"
-                        aria-label={`Delete ${entry.name}`}
-                        className="text-muted-foreground hover:text-destructive"
-                        onClick={() => setDeleting(entry)}
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </Button>
-                    </div>
-                  </div>
-                </div>
-              );
-            })}
+            {entries.map((entry) => (
+              <VaultEntryRow
+                key={`${entry.id}:${entry.updatedAt}`}
+                entry={entry}
+                onEdit={openEdit}
+                onDelete={setDeleting}
+              />
+            ))}
           </div>
         )}
       </div>
