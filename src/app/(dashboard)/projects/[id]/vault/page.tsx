@@ -1,14 +1,15 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
-import { ArrowLeft, FolderX, KeyRound, Plus } from "lucide-react";
+import { ArrowLeft, FolderX, KeyRound, Plus, Search } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { VaultEntryDialog } from "@/components/projects/vault-entry-dialog";
-import { VaultEntryRow } from "@/components/projects/vault-entry-row";
+import { VaultEntryRow, matchesVaultQuery } from "@/components/projects/vault-entry-row";
 import { ProjectDot } from "@/components/projects/project-badge";
 import { notify } from "@/lib/notify";
 import type { Project, VaultEntry } from "@/lib/types";
@@ -29,6 +30,7 @@ export default function ProjectVaultPage() {
   // same reason CreateTaskDialog and ProjectDialog do this rather than
   // re-syncing state from props in an effect.
   const [dialogKey, setDialogKey] = useState(0);
+  const [query, setQuery] = useState("");
 
   useEffect(() => {
     let cancelled = false;
@@ -94,6 +96,11 @@ export default function ProjectVaultPage() {
       notify.error("Could not delete credential");
     }
   };
+
+  const filteredEntries = useMemo(
+    () => entries.filter((entry) => matchesVaultQuery(entry, query)),
+    [entries, query]
+  );
 
   if (isLoading) {
     return (
@@ -171,6 +178,20 @@ export default function ProjectVaultPage() {
         </div>
       </header>
 
+      {entries.length > 0 && (
+        <div className="border-b bg-card/40 px-6 py-3">
+          <div className="relative mx-auto max-w-3xl">
+            <Search className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+            <Input
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder="Search by name, username, URL or notes…"
+              className="pl-8"
+            />
+          </div>
+        </div>
+      )}
+
       <div className="flex-1 overflow-auto p-6">
         {entries.length === 0 ? (
           <div className="flex flex-col items-center gap-3 py-20 text-center">
@@ -187,9 +208,14 @@ export default function ProjectVaultPage() {
               Add credential
             </Button>
           </div>
+        ) : filteredEntries.length === 0 ? (
+          <div className="flex flex-col items-center gap-3 py-20 text-center">
+            <Search className="h-8 w-8 text-muted-foreground/50" />
+            <p className="text-sm font-medium">No matches for &ldquo;{query}&rdquo;</p>
+          </div>
         ) : (
           <div className="mx-auto max-w-3xl space-y-2">
-            {entries.map((entry) => (
+            {filteredEntries.map((entry) => (
               <VaultEntryRow
                 key={`${entry.id}:${entry.updatedAt}`}
                 entry={entry}

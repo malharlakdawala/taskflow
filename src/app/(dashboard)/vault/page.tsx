@@ -2,12 +2,13 @@
 
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { KeyRound, Plus } from "lucide-react";
+import { KeyRound, Plus, Search } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { VaultEntryDialog } from "@/components/projects/vault-entry-dialog";
-import { VaultEntryRow } from "@/components/projects/vault-entry-row";
+import { VaultEntryRow, matchesVaultQuery } from "@/components/projects/vault-entry-row";
 import { ProjectDot } from "@/components/projects/project-badge";
 import { useProjects } from "@/lib/use-projects";
 import { notify } from "@/lib/notify";
@@ -31,6 +32,7 @@ export default function VaultPage() {
   // Same remount-on-open trick as the per-project vault page and every other
   // dialog in this codebase — see that page's own note.
   const [dialogKey, setDialogKey] = useState(0);
+  const [query, setQuery] = useState("");
 
   useEffect(() => {
     let cancelled = false;
@@ -59,15 +61,20 @@ export default function VaultPage() {
     [projects]
   );
 
+  const filteredEntries = useMemo(
+    () => entries.filter((entry) => matchesVaultQuery(entry, query)),
+    [entries, query]
+  );
+
   const groups = useMemo(() => {
     const byProject = new Map<string, VaultEntry[]>();
-    for (const entry of entries) {
+    for (const entry of filteredEntries) {
       const list = byProject.get(entry.projectId) ?? [];
       list.push(entry);
       byProject.set(entry.projectId, list);
     }
     return byProject;
-  }, [entries]);
+  }, [filteredEntries]);
 
   const openCreate = () => {
     setEditing(null);
@@ -120,6 +127,20 @@ export default function VaultPage() {
         )}
       </header>
 
+      {!loading && entries.length > 0 && (
+        <div className="border-b bg-card/40 px-6 py-3">
+          <div className="relative mx-auto max-w-3xl">
+            <Search className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+            <Input
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder="Search by name, username, URL, notes or project…"
+              className="pl-8"
+            />
+          </div>
+        </div>
+      )}
+
       <div className="flex-1 overflow-auto p-6">
         {loading ? (
           <div className="mx-auto max-w-3xl space-y-2">
@@ -151,6 +172,11 @@ export default function VaultPage() {
               <Plus className="h-4 w-4" />
               Add credential
             </Button>
+          </div>
+        ) : filteredEntries.length === 0 ? (
+          <div className="flex flex-col items-center gap-3 py-20 text-center">
+            <Search className="h-8 w-8 text-muted-foreground/50" />
+            <p className="text-sm font-medium">No matches for &ldquo;{query}&rdquo;</p>
           </div>
         ) : (
           <div className="mx-auto max-w-3xl space-y-6">

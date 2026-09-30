@@ -1,19 +1,33 @@
 "use client";
 
-import { useState } from "react";
-import { Copy, Eye, EyeOff, Loader2, Pencil, Trash2 } from "lucide-react";
+import { useEffect, useState } from "react";
+import { Copy, Loader2, Pencil, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ProjectBadge } from "@/components/projects/project-badge";
 import { notify } from "@/lib/notify";
 import { displayName } from "@/lib/utils";
 import type { VaultEntry } from "@/lib/types";
 
+/** Shared by both vault pages' search bars — matches name, username, URL, notes, and (workspace view only) project name. */
+export function matchesVaultQuery(entry: VaultEntry, query: string): boolean {
+  const q = query.trim().toLowerCase();
+  if (!q) return true;
+  return [entry.name, entry.username, entry.url, entry.notes, entry.project?.name].some(
+    (field) => field?.toLowerCase().includes(q)
+  );
+}
+
 /**
  * One credential card — shared by the per-project vault page and the
  * workspace-wide one. Revealed plaintext lives in this component's own state,
  * not the parent's: keying the row on `updatedAt` (below) remounts it after
- * an edit, which is what clears a stale reveal for free, the same trick
+ * an edit, which is what fetches a fresh reveal for free, the same trick
  * CreateTaskDialog and ProjectDialog use for their own remount-on-open.
+ *
+ * The password decrypts and shows as soon as the row mounts — no separate
+ * reveal click. That trades a little more traffic (every visible entry's
+ * secret is fetched on load) for one less step every time the vault is
+ * actually opened to use a credential, which is the whole point of it.
  */
 export function VaultEntryRow({
   entry,
@@ -28,30 +42,37 @@ export function VaultEntryRow({
   onDelete: (entry: VaultEntry) => void;
 }) {
   const [revealed, setRevealed] = useState<string | null>(null);
-  const [isRevealing, setIsRevealing] = useState(false);
+  // Starts true exactly when there's something to fetch, so the effect below
+  // never has to set it synchronously on entry — only ever from within the
+  // async callbacks, once the request actually settles.
+  const [isRevealing, setIsRevealing] = useState(entry.hasPassword);
 
-  const toggleReveal = async () => {
-    if (revealed !== null) {
-      setRevealed(null);
-      return;
-    }
+  useEffect(() => {
     if (!entry.hasPassword) return;
+    let cancelled = false;
 
-    setIsRevealing(true);
-    try {
-      const response = await fetch(`/api/vault/${entry.id}/reveal`, { method: "POST" });
-      const body = await response.json();
-      if (!response.ok) throw new Error(body?.error ?? "Could not reveal password");
-      setRevealed(body.password ?? "");
-    } catch (error) {
-      notify.error(
-        "Could not reveal password",
-        error instanceof Error ? error.message : undefined
-      );
-    } finally {
-      setIsRevealing(false);
-    }
-  };
+    fetch(`/api/vault/${entry.id}/reveal`, { method: "POST" })
+      .then(async (response) => {
+        const body = await response.json();
+        if (!response.ok) throw new Error(body?.error ?? "Could not reveal password");
+        if (!cancelled) setRevealed(body.password ?? "");
+      })
+      .catch((error) => {
+        if (!cancelled) {
+          notify.error(
+            "Could not reveal password",
+            error instanceof Error ? error.message : undefined
+          );
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setIsRevealing(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [entry.id, entry.hasPassword]);
 
   const copyPassword = async () => {
     if (revealed === null) return;
@@ -92,24 +113,11 @@ export function VaultEntryRow({
             {entry.hasPassword && (
               <div className="flex items-center gap-1.5">
                 <span className="text-xs text-muted-foreground">Pass:</span>
-                <span className="font-mono text-xs">
-                  {revealed !== null ? revealed : "••••••••"}
-                </span>
-                <button
-                  type="button"
-                  aria-label={revealed !== null ? "Hide password" : "Reveal password"}
-                  onClick={toggleReveal}
-                  disabled={isRevealing}
-                  className="rounded p-0.5 text-muted-foreground hover:text-foreground"
-                >
-                  {isRevealing ? (
-                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                  ) : revealed !== null ? (
-                    <EyeOff className="h-3.5 w-3.5" />
-                  ) : (
-                    <Eye className="h-3.5 w-3.5" />
-                  )}
-                </button>
+                {isRevealing ? (
+                  <Loader2 className="h-3.5 w-3.5 animate-spin text-muted-foreground" />
+                ) : (
+                  <span className="font-mono text-xs">{revealed ?? "••••••••"}</span>
+                )}
                 {revealed !== null && (
                   <button
                     type="button"
