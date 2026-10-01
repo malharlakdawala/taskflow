@@ -27,6 +27,17 @@ if (typeof window !== "undefined" && process.env.NEXT_PUBLIC_POSTHOG_KEY) {
     // traffic volume for, without creating a billable person profile for
     // every one — only identify() (see PostHogIdentify) does that.
     person_profiles: "identified_only",
+    // Unhandled exceptions, with stack traces, into Error Tracking.
+    capture_exceptions: true,
+    // Session replay. maskAllInputs covers every <input> including the
+    // vault's password field — but a revealed password renders as plain
+    // text, not an input, so that's never enough on its own: the vault's
+    // own markup carries the ph-no-capture class (PostHog's documented
+    // opt-out marker), which blocks recording that subtree outright,
+    // regardless of this or any other client config.
+    session_recording: {
+      maskAllInputs: true,
+    },
   });
 }
 
