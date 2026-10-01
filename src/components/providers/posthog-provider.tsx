@@ -1,15 +1,22 @@
 "use client";
 
 import posthog from "posthog-js";
-import { PostHogProvider as PHProvider } from "posthog-js/react";
+import { PostHogProvider as PHProvider, usePostHog } from "posthog-js/react";
 import { Suspense, useEffect } from "react";
 import { usePathname, useSearchParams } from "next/navigation";
-import { usePostHog } from "posthog-js/react";
+
+declare global {
+  interface Window {
+    /** Console-debugging convenience only — app code should use usePostHog(). */
+    posthog?: typeof posthog;
+  }
+}
 
 // Module scope, not inside the component: runs once per client bundle load,
 // so Strict Mode's double-invoked effects can't double-init it the way an
 // effect-based guard would need extra bookkeeping to avoid.
 if (typeof window !== "undefined" && process.env.NEXT_PUBLIC_POSTHOG_KEY) {
+  window.posthog = posthog;
   posthog.init(process.env.NEXT_PUBLIC_POSTHOG_KEY, {
     api_host: process.env.NEXT_PUBLIC_POSTHOG_HOST ?? "https://eu.i.posthog.com",
     // The App Router doesn't do full page loads on navigation, so posthog-js's
