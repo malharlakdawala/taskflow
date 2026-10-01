@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation";
 import { Sidebar } from "@/components/sidebar";
+import { PostHogIdentify } from "@/components/providers/posthog-identify";
 import { getAppUser } from "@/lib/auth";
 
 /**
@@ -19,6 +20,7 @@ export default async function DashboardLayout({
 
   return (
     <div className="flex h-screen">
+      <PostHogIdentify user={user} />
       <Sidebar user={user} />
       <main className="flex-1 overflow-auto">{children}</main>
     </div>

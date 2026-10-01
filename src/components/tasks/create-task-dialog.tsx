@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { usePostHog } from "posthog-js/react";
 import {
   Dialog,
   DialogContent,
@@ -52,6 +53,7 @@ export function CreateTaskDialog({
   defaultStatus,
   defaultProjectId,
 }: CreateTaskDialogProps) {
+  const posthog = usePostHog();
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [status, setStatus] = useState<TaskStatus>(defaultStatus ?? "TODO");
@@ -191,6 +193,13 @@ export function CreateTaskDialog({
         }
       }
 
+      posthog?.capture("task_created", {
+        status,
+        priority,
+        has_project: projectId !== null,
+        has_due_date: dueDate !== "",
+        attachment_count: attachments.length,
+      });
       onTaskCreated(task);
       reset();
       onOpenChange(false);
