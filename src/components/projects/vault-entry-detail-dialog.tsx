@@ -73,7 +73,10 @@ export function VaultEntryDetailDialog({
         }
       }}
     >
-      <DialogContent className="sm:max-w-[440px]">
+      {/* ph-no-capture: PostHog's documented opt-out marker, blocks session
+          replay from recording this subtree at all — the only place a
+          password ever renders as plain text rather than a maskable input. */}
+      <DialogContent className="ph-no-capture sm:max-w-[440px]">
         <DialogHeader>
           <DialogTitle className="flex flex-wrap items-center gap-2">
             {entry.name}
