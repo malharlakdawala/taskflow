@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
+import { useFeatureFlagEnabled } from "posthog-js/react";
 import { KeyRound, Plus, Search } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -23,6 +24,12 @@ import type { VaultEntry } from "@/lib/types";
  * is exactly who else can see it.
  */
 export default function VaultPage() {
+  // A real PostHog feature flag, not a hardcoded default — toggle it off in
+  // PostHog's dashboard and the search bar disappears for everyone, no
+  // redeploy. Undefined while flags are still loading reads as "on": the
+  // bar flashing in a moment after the page paints is a smaller cost than
+  // the whole page waiting on a flags round-trip before rendering at all.
+  const searchEnabled = useFeatureFlagEnabled("vault-search") !== false;
   const { projects, isLoading: projectsLoading } = useProjects();
   const [entries, setEntries] = useState<VaultEntry[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -129,7 +136,7 @@ export default function VaultPage() {
         )}
       </header>
 
-      {!loading && entries.length > 0 && (
+      {!loading && entries.length > 0 && searchEnabled && (
         <div className="border-b bg-card/40 px-6 py-3">
           <div className="relative mx-auto max-w-3xl">
             <Search className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
