@@ -186,9 +186,9 @@ export default function BoardPage() {
     setTasks((prev) => [...prev, task]);
   };
 
-  const handleTaskDeleted = (taskId: string) => {
+  const handleTaskDeleted = useCallback((taskId: string) => {
     setTasks((prev) => prev.filter((task) => task.id !== taskId));
-  };
+  }, []);
 
   return (
     <div className="h-full flex flex-col">
@@ -262,6 +262,17 @@ export default function BoardPage() {
                                   ref={dragProvided.innerRef}
                                   {...dragProvided.draggableProps}
                                   {...dragProvided.dragHandleProps}
+                                  // A column can hold hundreds of cards; skipping
+                                  // layout/paint for ones currently off-screen is
+                                  // what actually fixed the measured INP here —
+                                  // dragSnapshot.isDragging below overrides this
+                                  // for the one card actually moving, so a drag
+                                  // in progress is never what gets skipped.
+                                  className={
+                                    dragSnapshot.isDragging
+                                      ? undefined
+                                      : "[content-visibility:auto] [contain-intrinsic-size:auto_140px]"
+                                  }
                                 >
                                   <TaskCard
                                     task={task}

@@ -603,7 +603,13 @@ function ListView() {
                           {rows.map((task) => {
                             const isSelected = selected.has(task.id);
                             return (
-                              <li key={task.id}>
+                              <li
+                                key={task.id}
+                                // A group can hold hundreds of rows; skipping
+                                // layout/paint for off-screen ones is what
+                                // actually fixed the measured click latency.
+                                className="[content-visibility:auto] [contain-intrinsic-size:auto_41px]"
+                              >
                                 {/* The whole row navigates; each editable cell
                                     stops propagation so it works in place. */}
                                 <div

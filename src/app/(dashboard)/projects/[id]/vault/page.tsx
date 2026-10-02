@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
-import { useFeatureFlagEnabled } from "posthog-js/react";
+import { useFeatureFlagVariantKey, usePostHog } from "posthog-js/react";
 import { ArrowLeft, FolderX, KeyRound, Plus, Search } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -17,8 +17,10 @@ import { notify } from "@/lib/notify";
 import type { Project, VaultEntry } from "@/lib/types";
 
 export default function ProjectVaultPage() {
-  // Same flag as the workspace-wide vault view — see that page's own note.
-  const searchEnabled = useFeatureFlagEnabled("vault-search") !== false;
+  const posthog = usePostHog();
+  // Same experiment as the workspace-wide vault view — see that page's own note.
+  const searchVariant = useFeatureFlagVariantKey("vault-search-experiment");
+  const searchEnabled = searchVariant !== "control";
   const params = useParams();
   const projectId = params.id as string;
 
@@ -82,6 +84,12 @@ export default function ProjectVaultPage() {
     setEditing(entry);
     setDialogKey((key) => key + 1);
     setIsDialogOpen(true);
+  };
+
+  // The experiment's goal metric — see searchVariant above.
+  const handleView = (entry: VaultEntry) => {
+    posthog?.capture("vault_entry_viewed", { search_variant: searchVariant });
+    setViewing(entry);
   };
 
   const handleSaved = (entry: VaultEntry) => {
@@ -224,7 +232,7 @@ export default function ProjectVaultPage() {
               <VaultEntryRow
                 key={`${entry.id}:${entry.updatedAt}`}
                 entry={entry}
-                onView={setViewing}
+                onView={handleView}
                 onEdit={openEdit}
                 onDelete={setDeleting}
               />
