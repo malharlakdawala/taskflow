@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { useFeatureFlagEnabled } from "posthog-js/react";
+import { useFeatureFlagVariantKey, usePostHog } from "posthog-js/react";
 import { KeyRound, Plus, Search } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -24,12 +24,13 @@ import type { VaultEntry } from "@/lib/types";
  * is exactly who else can see it.
  */
 export default function VaultPage() {
-  // A real PostHog feature flag, not a hardcoded default — toggle it off in
-  // PostHog's dashboard and the search bar disappears for everyone, no
-  // redeploy. Undefined while flags are still loading reads as "on": the
-  // bar flashing in a moment after the page paints is a smaller cost than
-  // the whole page waiting on a flags round-trip before rendering at all.
-  const searchEnabled = useFeatureFlagEnabled("vault-search") !== false;
+  const posthog = usePostHog();
+  // A real running PostHog experiment, not a hardcoded default: "control"
+  // hides the search bar, "test" (and the brief undefined window while
+  // flags are still loading) shows it. vault_entry_viewed below is its goal
+  // metric — whichever variant gets a credential opened more often wins.
+  const searchVariant = useFeatureFlagVariantKey("vault-search-experiment");
+  const searchEnabled = searchVariant !== "control";
   const { projects, isLoading: projectsLoading } = useProjects();
   const [entries, setEntries] = useState<VaultEntry[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -95,6 +96,12 @@ export default function VaultPage() {
     setEditing(entry);
     setDialogKey((key) => key + 1);
     setIsDialogOpen(true);
+  };
+
+  // The experiment's goal metric — see searchVariant above.
+  const handleView = (entry: VaultEntry) => {
+    posthog?.capture("vault_entry_viewed", { search_variant: searchVariant });
+    setViewing(entry);
   };
 
   const handleSaved = (entry: VaultEntry) => {
@@ -208,7 +215,7 @@ export default function VaultPage() {
                       <VaultEntryRow
                         key={`${entry.id}:${entry.updatedAt}`}
                         entry={entry}
-                        onView={setViewing}
+                        onView={handleView}
                         onEdit={openEdit}
                         onDelete={setDeleting}
                       />

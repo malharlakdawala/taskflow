@@ -1,5 +1,6 @@
 "use client";
 
+import { memo } from "react";
 import { Calendar, MessageSquare, Paperclip } from "lucide-react";
 import Link from "next/link";
 import type { Task } from "@/lib/types";
@@ -13,7 +14,14 @@ interface TaskCardProps {
   onDelete?: (taskId: string) => void;
 }
 
-export function TaskCard({ task, isDragging }: TaskCardProps) {
+/**
+ * Memoized: a board column can hold hundreds of these, and a drag only
+ * changes the one card actually moving plus the renumbered order of its
+ * destination column — every task that didn't move keeps the same object
+ * reference (see BoardPage's handleDragEnd), so this skips re-rendering
+ * for all of them instead of re-mounting the whole column on every drop.
+ */
+export const TaskCard = memo(function TaskCard({ task, isDragging }: TaskCardProps) {
   const preview = toPlainText(task.description);
   const due = task.dueDate ? new Date(task.dueDate) : null;
   const isOverdue = due !== null && due < new Date() && task.status !== "DONE";
@@ -112,4 +120,4 @@ export function TaskCard({ task, isDragging }: TaskCardProps) {
       </article>
     </Link>
   );
-}
+});
