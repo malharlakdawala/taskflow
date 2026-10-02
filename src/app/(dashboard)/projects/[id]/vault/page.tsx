@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
+import { useFeatureFlagEnabled } from "posthog-js/react";
 import { ArrowLeft, FolderX, KeyRound, Plus, Search } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -16,6 +17,8 @@ import { notify } from "@/lib/notify";
 import type { Project, VaultEntry } from "@/lib/types";
 
 export default function ProjectVaultPage() {
+  // Same flag as the workspace-wide vault view — see that page's own note.
+  const searchEnabled = useFeatureFlagEnabled("vault-search") !== false;
   const params = useParams();
   const projectId = params.id as string;
 
@@ -180,7 +183,7 @@ export default function ProjectVaultPage() {
         </div>
       </header>
 
-      {entries.length > 0 && (
+      {entries.length > 0 && searchEnabled && (
         <div className="border-b bg-card/40 px-6 py-3">
           <div className="relative mx-auto max-w-3xl">
             <Search className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
