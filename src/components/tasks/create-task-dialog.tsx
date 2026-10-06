@@ -20,7 +20,17 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Paperclip, Upload, X, Loader2 } from "lucide-react";
+import {
+  Paperclip,
+  Upload,
+  X,
+  Loader2,
+  Check,
+  Copy,
+  Share2,
+  ExternalLink,
+} from "lucide-react";
+import Link from "next/link";
 import { TiptapEditor } from "@/components/editor/tiptap-editor";
 import { AssigneePicker } from "@/components/tasks/assignee-picker";
 import { ProjectPicker } from "@/components/projects/project-picker";
@@ -62,13 +72,22 @@ export function CreateTaskDialog({
   const [dueDate, setDueDate] = useState("");
   const [assigneeId, setAssigneeId] = useState<string | null>(null);
   const [projectId, setProjectId] = useState<string | null>(
-    defaultProjectId ?? null
+    defaultProjectId ?? null,
   );
   const [attachments, setAttachments] = useState<PendingAttachment[]>([]);
   const [isUploading, setIsUploading] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [editorKey, setEditorKey] = useState(0);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  // Set once the task exists, which swaps the form for its shareable link.
+  const [created, setCreated] = useState<{ id: string; title: string } | null>(
+    null,
+  );
+
+  const handleOpenChange = (next: boolean) => {
+    if (!next) setCreated(null);
+    onOpenChange(next);
+  };
 
   // Re-sync when reopened from a different list section. Tracking the last
   // value avoids setting state on every render the effect happens to run in.
@@ -134,7 +153,7 @@ export function CreateTaskDialog({
     } catch (error) {
       notify.error(
         "Could not upload file",
-        error instanceof Error ? error.message : undefined
+        error instanceof Error ? error.message : undefined,
       );
     } finally {
       setIsUploading(false);
@@ -165,7 +184,7 @@ export function CreateTaskDialog({
       const task: Task = await response.json();
       if (!response.ok) {
         throw new Error(
-          (task as { error?: string })?.error ?? "Could not create task"
+          (task as { error?: string })?.error ?? "Could not create task",
         );
       }
 
@@ -179,7 +198,7 @@ export function CreateTaskDialog({
               body: JSON.stringify(attachment),
             });
             return res.ok ? await res.json() : null;
-          })
+          }),
         );
         const attached = saved.filter(Boolean);
         task.attachments = attached;
@@ -188,7 +207,7 @@ export function CreateTaskDialog({
         if (attached.length < attachments.length) {
           notify.error(
             "Some files could not be attached",
-            "The task was created; add them again from the task page."
+            "The task was created; add them again from the task page.",
           );
         }
       }
@@ -202,12 +221,12 @@ export function CreateTaskDialog({
       });
       onTaskCreated(task);
       reset();
-      onOpenChange(false);
+      setCreated({ id: task.id, title: task.title });
     } catch (error) {
       console.error("Failed to create task:", error);
       notify.error(
         "Could not create task",
-        error instanceof Error ? error.message : undefined
+        error instanceof Error ? error.message : undefined,
       );
     } finally {
       setIsLoading(false);
@@ -215,180 +234,267 @@ export function CreateTaskDialog({
   };
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
+    <Dialog open={open} onOpenChange={handleOpenChange}>
       <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-[720px]">
-        <DialogHeader>
-          <DialogTitle>Create New Task</DialogTitle>
-          <DialogDescription>
-            Add formatting, images and files here — no need to open the task
-            afterwards.
-          </DialogDescription>
-        </DialogHeader>
-        <form onSubmit={handleSubmit}>
-          <div className="grid gap-4 py-4">
-            <div className="grid gap-2">
-              <Label htmlFor="title">Title</Label>
-              <Input
-                id="title"
-                value={title}
-                onChange={(e) => setTitle(e.target.value)}
-                placeholder="Task title"
-                required
-              />
-            </div>
+        {created ? (
+          <ShareCreatedTask
+            task={created}
+            onDone={() => handleOpenChange(false)}
+          />
+        ) : (
+          <>
+            <DialogHeader>
+              <DialogTitle>Create New Task</DialogTitle>
+              <DialogDescription>
+                Add formatting, images and files here — no need to open the task
+                afterwards.
+              </DialogDescription>
+            </DialogHeader>
+            <form onSubmit={handleSubmit}>
+              <div className="grid gap-4 py-4">
+                <div className="grid gap-2">
+                  <Label htmlFor="title">Title</Label>
+                  <Input
+                    id="title"
+                    value={title}
+                    onChange={(e) => setTitle(e.target.value)}
+                    placeholder="Task title"
+                    required
+                  />
+                </div>
 
-            <div className="grid gap-2">
-              <Label>Description</Label>
-              <TiptapEditor
-                key={editorKey}
-                content=""
-                onChange={setDescription}
-                placeholder="Describe the task… paste or drag in images"
-              />
-            </div>
+                <div className="grid gap-2">
+                  <Label>Description</Label>
+                  <TiptapEditor
+                    key={editorKey}
+                    content=""
+                    onChange={setDescription}
+                    placeholder="Describe the task… paste or drag in images"
+                  />
+                </div>
 
-            <div className="grid gap-2">
-              <div className="flex items-center justify-between">
-                <Label>Attachments</Label>
-                <Button
-                  type="button"
-                  size="sm"
-                  variant="outline"
-                  disabled={isUploading}
-                  onClick={() => fileInputRef.current?.click()}
-                >
-                  {isUploading ? (
-                    <Loader2 className="mr-1 h-4 w-4 animate-spin" />
-                  ) : (
-                    <Upload className="mr-1 h-4 w-4" />
-                  )}
-                  Add files
-                </Button>
-              </div>
-              <input
-                ref={fileInputRef}
-                type="file"
-                multiple
-                hidden
-                onChange={handleFiles}
-              />
-              {attachments.length > 0 && (
-                <ul className="space-y-1">
-                  {attachments.map((attachment) => (
-                    <li
-                      key={attachment.url}
-                      className="flex items-center gap-2 rounded-md border p-2 text-sm"
+                <div className="grid gap-2">
+                  <div className="flex items-center justify-between">
+                    <Label>Attachments</Label>
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      disabled={isUploading}
+                      onClick={() => fileInputRef.current?.click()}
                     >
-                      <Paperclip className="h-4 w-4 shrink-0 text-muted-foreground" />
-                      <span className="min-w-0 flex-1 truncate">
-                        {attachment.filename}
-                      </span>
-                      <span className="shrink-0 text-xs text-muted-foreground">
-                        {(attachment.fileSize / 1024).toFixed(0)} KB
-                      </span>
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="icon"
-                        className="h-6 w-6 shrink-0"
-                        aria-label={`Remove ${attachment.filename}`}
-                        onClick={() =>
-                          setAttachments((prev) =>
-                            prev.filter((a) => a.url !== attachment.url)
-                          )
-                        }
-                      >
-                        <X className="h-3 w-3" />
-                      </Button>
-                    </li>
-                  ))}
-                </ul>
-              )}
-            </div>
+                      {isUploading ? (
+                        <Loader2 className="mr-1 h-4 w-4 animate-spin" />
+                      ) : (
+                        <Upload className="mr-1 h-4 w-4" />
+                      )}
+                      Add files
+                    </Button>
+                  </div>
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    multiple
+                    hidden
+                    onChange={handleFiles}
+                  />
+                  {attachments.length > 0 && (
+                    <ul className="space-y-1">
+                      {attachments.map((attachment) => (
+                        <li
+                          key={attachment.url}
+                          className="flex items-center gap-2 rounded-md border p-2 text-sm"
+                        >
+                          <Paperclip className="h-4 w-4 shrink-0 text-muted-foreground" />
+                          <span className="min-w-0 flex-1 truncate">
+                            {attachment.filename}
+                          </span>
+                          <span className="shrink-0 text-xs text-muted-foreground">
+                            {(attachment.fileSize / 1024).toFixed(0)} KB
+                          </span>
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="icon"
+                            className="h-6 w-6 shrink-0"
+                            aria-label={`Remove ${attachment.filename}`}
+                            onClick={() =>
+                              setAttachments((prev) =>
+                                prev.filter((a) => a.url !== attachment.url),
+                              )
+                            }
+                          >
+                            <X className="h-3 w-3" />
+                          </Button>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </div>
 
-            <div className="grid grid-cols-2 gap-4 sm:grid-cols-3">
-              <div className="grid gap-2">
-                <Label>Project</Label>
-                <ProjectPicker value={projectId} onChange={setProjectId} />
+                <div className="grid grid-cols-2 gap-4 sm:grid-cols-3">
+                  <div className="grid gap-2">
+                    <Label>Project</Label>
+                    <ProjectPicker value={projectId} onChange={setProjectId} />
+                  </div>
+                  <div className="grid gap-2">
+                    <Label>Status</Label>
+                    <Select
+                      items={STATUS_ITEMS}
+                      value={status}
+                      onValueChange={(v) => v && setStatus(v as TaskStatus)}
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="Select status" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="BACKLOG">Backlog</SelectItem>
+                        <SelectItem value="TODO">To Do</SelectItem>
+                        <SelectItem value="IN_PROGRESS">In Progress</SelectItem>
+                        <SelectItem value="IN_REVIEW">In Review</SelectItem>
+                        <SelectItem value="DONE">Done</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="grid gap-2">
+                    <Label>Priority</Label>
+                    <Select
+                      items={PRIORITY_ITEMS}
+                      value={priority}
+                      onValueChange={(v) => v && setPriority(v as TaskPriority)}
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="Select priority" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="NONE">No Priority</SelectItem>
+                        <SelectItem value="LOW">Low</SelectItem>
+                        <SelectItem value="MEDIUM">Medium</SelectItem>
+                        <SelectItem value="HIGH">High</SelectItem>
+                        <SelectItem value="URGENT">Urgent</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="grid gap-2">
+                    <Label htmlFor="startDate">Start Date</Label>
+                    <Input
+                      id="startDate"
+                      type="date"
+                      value={startDate}
+                      max={dueDate || undefined}
+                      onChange={(e) => setStartDate(e.target.value)}
+                    />
+                  </div>
+                  <div className="grid gap-2">
+                    <Label htmlFor="dueDate">Due Date</Label>
+                    <Input
+                      id="dueDate"
+                      type="date"
+                      value={dueDate}
+                      min={startDate || undefined}
+                      onChange={(e) => setDueDate(e.target.value)}
+                    />
+                  </div>
+                  <div className="grid gap-2">
+                    <Label>Assignee</Label>
+                    <AssigneePicker
+                      value={assigneeId}
+                      onChange={setAssigneeId}
+                      placeholder="Me"
+                    />
+                  </div>
+                </div>
               </div>
-              <div className="grid gap-2">
-                <Label>Status</Label>
-                <Select
-                  items={STATUS_ITEMS}
-                  value={status}
-                  onValueChange={(v) => v && setStatus(v as TaskStatus)}
+              <DialogFooter>
+                <Button
+                  type="submit"
+                  disabled={isLoading || isUploading || !title.trim()}
                 >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select status" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="BACKLOG">Backlog</SelectItem>
-                    <SelectItem value="TODO">To Do</SelectItem>
-                    <SelectItem value="IN_PROGRESS">In Progress</SelectItem>
-                    <SelectItem value="IN_REVIEW">In Review</SelectItem>
-                    <SelectItem value="DONE">Done</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="grid gap-2">
-                <Label>Priority</Label>
-                <Select
-                  items={PRIORITY_ITEMS}
-                  value={priority}
-                  onValueChange={(v) => v && setPriority(v as TaskPriority)}
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select priority" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="NONE">No Priority</SelectItem>
-                    <SelectItem value="LOW">Low</SelectItem>
-                    <SelectItem value="MEDIUM">Medium</SelectItem>
-                    <SelectItem value="HIGH">High</SelectItem>
-                    <SelectItem value="URGENT">Urgent</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="grid gap-2">
-                <Label htmlFor="startDate">Start Date</Label>
-                <Input
-                  id="startDate"
-                  type="date"
-                  value={startDate}
-                  max={dueDate || undefined}
-                  onChange={(e) => setStartDate(e.target.value)}
-                />
-              </div>
-              <div className="grid gap-2">
-                <Label htmlFor="dueDate">Due Date</Label>
-                <Input
-                  id="dueDate"
-                  type="date"
-                  value={dueDate}
-                  min={startDate || undefined}
-                  onChange={(e) => setDueDate(e.target.value)}
-                />
-              </div>
-              <div className="grid gap-2">
-                <Label>Assignee</Label>
-                <AssigneePicker
-                  value={assigneeId}
-                  onChange={setAssigneeId}
-                  placeholder="Me"
-                />
-              </div>
-            </div>
-          </div>
-          <DialogFooter>
-            <Button
-              type="submit"
-              disabled={isLoading || isUploading || !title.trim()}
-            >
-              {isLoading ? "Creating…" : "Create Task"}
-            </Button>
-          </DialogFooter>
-        </form>
+                  {isLoading ? "Creating…" : "Create Task"}
+                </Button>
+              </DialogFooter>
+            </form>
+          </>
+        )}
       </DialogContent>
     </Dialog>
+  );
+}
+
+/** Shown right after creation so the link can be passed on without opening the task. */
+function ShareCreatedTask({
+  task,
+  onDone,
+}: {
+  task: { id: string; title: string };
+  onDone: () => void;
+}) {
+  const [copied, setCopied] = useState(false);
+  const url = `${window.location.origin}/tasks/${task.id}`;
+  // Title first, so whoever receives it knows what the link is about.
+  const message = `${task.title}\n${url}`;
+  const canShare = typeof navigator !== "undefined" && "share" in navigator;
+
+  const copy = async () => {
+    try {
+      await navigator.clipboard.writeText(message);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch {
+      notify.error("Could not copy", "Select the link and copy it manually.");
+    }
+  };
+
+  const share = async () => {
+    try {
+      await navigator.share({ title: task.title, text: task.title, url });
+    } catch (error) {
+      // Closing the share sheet rejects with AbortError; that isn't a failure.
+      if (error instanceof Error && error.name !== "AbortError") {
+        notify.error("Could not share", "Copy the link instead.");
+      }
+    }
+  };
+
+  return (
+    <>
+      <DialogHeader>
+        <DialogTitle>Task created</DialogTitle>
+        <DialogDescription>
+          Share this link with anyone who should see the task.
+        </DialogDescription>
+      </DialogHeader>
+      <div className="grid gap-2 py-4">
+        <p className="truncate text-sm font-medium">{task.title}</p>
+        <code className="truncate rounded bg-muted/60 px-2 py-1.5 font-mono text-xs">
+          {url}
+        </code>
+      </div>
+      <DialogFooter className="gap-2">
+        <Button
+          variant="ghost"
+          render={<Link href={`/tasks/${task.id}`} />}
+          onClick={onDone}
+        >
+          <ExternalLink className="mr-1 h-4 w-4" />
+          Open task
+        </Button>
+        {canShare && (
+          <Button variant="outline" onClick={share}>
+            <Share2 className="mr-1 h-4 w-4" />
+            Share
+          </Button>
+        )}
+        <Button variant="outline" onClick={copy}>
+          {copied ? (
+            <Check className="mr-1 h-4 w-4" />
+          ) : (
+            <Copy className="mr-1 h-4 w-4" />
+          )}
+          {copied ? "Copied" : "Copy link"}
+        </Button>
+        <Button onClick={onDone}>Done</Button>
+      </DialogFooter>
+    </>
   );
 }
