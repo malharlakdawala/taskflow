@@ -49,7 +49,12 @@ export async function POST(request: Request) {
 
     const posthog = getPostHogServerClient();
     if (posthog) {
-      void posthog.captureImmediate({
+      // Awaited, not fire-and-forget: a serverless function can freeze the
+      // instant its response is sent, which cuts off anything still in
+      // flight. captureImmediate's whole point is to resolve only once the
+      // event has actually been sent — so this has to be on the critical
+      // path, not a void call racing the return below.
+      await posthog.captureImmediate({
         distinctId: guard.user.id,
         event: "$ai_generation",
         properties: {
@@ -69,7 +74,7 @@ export async function POST(request: Request) {
   } catch (error) {
     const posthog = getPostHogServerClient();
     if (posthog) {
-      void posthog.captureImmediate({
+      await posthog.captureImmediate({
         distinctId: guard.user.id,
         event: "$ai_generation",
         properties: {

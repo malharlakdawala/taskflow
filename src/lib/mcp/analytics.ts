@@ -24,14 +24,22 @@ interface ClientInfo {
   version?: string;
 }
 
-export function captureMcpInitialize(
+/**
+ * Every capture here is awaited by its caller, not fire-and-forget: a
+ * serverless function can freeze the instant its response is sent, which
+ * would cut off a void captureImmediate() call before it actually reached
+ * PostHog. captureImmediate's whole point is to resolve only once the event
+ * has been sent, so it has to stay on the critical path.
+ */
+
+export async function captureMcpInitialize(
   actor: AppUser,
   clientInfo: ClientInfo | undefined,
   protocolVersion: string
 ) {
   const client = getPostHogServerClient();
   if (!client) return;
-  void client.captureImmediate({
+  await client.captureImmediate({
     distinctId: actor.id,
     event: "$mcp_initialize",
     properties: {
@@ -44,14 +52,14 @@ export function captureMcpInitialize(
   });
 }
 
-export function captureMcpToolsList(
+export async function captureMcpToolsList(
   actor: AppUser,
   toolNames: string[],
   durationMs: number
 ) {
   const client = getPostHogServerClient();
   if (!client) return;
-  void client.captureImmediate({
+  await client.captureImmediate({
     distinctId: actor.id,
     event: "$mcp_tools_list",
     properties: {
@@ -63,7 +71,7 @@ export function captureMcpToolsList(
   });
 }
 
-export function captureMcpToolCall(
+export async function captureMcpToolCall(
   actor: AppUser,
   params: {
     toolName: string;
@@ -78,7 +86,7 @@ export function captureMcpToolCall(
 ) {
   const client = getPostHogServerClient();
   if (!client) return;
-  void client.captureImmediate({
+  await client.captureImmediate({
     distinctId: actor.id,
     event: "$mcp_tool_call",
     properties: {

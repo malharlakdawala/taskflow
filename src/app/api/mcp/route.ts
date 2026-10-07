@@ -169,7 +169,7 @@ async function dispatch(message: RpcRequest, actor: AppUser) {
           : LATEST_PROTOCOL_VERSION;
 
       const clientInfo = message.params?.clientInfo;
-      captureMcpInitialize(
+      await captureMcpInitialize(
         actor,
         typeof clientInfo === "object" && clientInfo !== null
           ? (clientInfo as { name?: string; version?: string })
@@ -199,7 +199,7 @@ async function dispatch(message: RpcRequest, actor: AppUser) {
         description,
         inputSchema,
       }));
-      captureMcpToolsList(
+      await captureMcpToolsList(
         actor,
         tools.map((t) => t.name),
         Date.now() - started
@@ -242,7 +242,7 @@ async function callTool(id: Id, message: RpcRequest, actor: AppUser) {
     const detail = args.error.issues
       .map((issue) => `${issue.path.join(".") || "(root)"}: ${issue.message}`)
       .join("; ");
-    captureMcpToolCall(actor, {
+    await captureMcpToolCall(actor, {
       toolName: name,
       toolDescription: tool.description,
       args: rawArgs,
@@ -256,7 +256,7 @@ async function callTool(id: Id, message: RpcRequest, actor: AppUser) {
 
   try {
     const output = await tool.run(args.data, actor);
-    captureMcpToolCall(actor, {
+    await captureMcpToolCall(actor, {
       toolName: name,
       toolDescription: tool.description,
       args: args.data,
@@ -267,7 +267,7 @@ async function callTool(id: Id, message: RpcRequest, actor: AppUser) {
     return toolResult(id, output);
   } catch (error) {
     if (error instanceof McpToolError) {
-      captureMcpToolCall(actor, {
+      await captureMcpToolCall(actor, {
         toolName: name,
         toolDescription: tool.description,
         args: args.data,
@@ -282,7 +282,7 @@ async function callTool(id: Id, message: RpcRequest, actor: AppUser) {
     // back something that doesn't leak internals into a context window.
     console.error(`[mcp] ${name} failed for ${actor.email}:`, error);
     reportError(`mcp.tool.${name}`, error);
-    captureMcpToolCall(actor, {
+    await captureMcpToolCall(actor, {
       toolName: name,
       toolDescription: tool.description,
       args: args.data,
