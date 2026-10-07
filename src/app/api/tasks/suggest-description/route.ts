@@ -1,17 +1,28 @@
 import { NextResponse } from "next/server";
 import { randomUUID } from "node:crypto";
 import { generateText } from "ai";
+import { createOpenAICompatible } from "@ai-sdk/openai-compatible";
 import { requireMember } from "@/lib/auth";
 import { formatZodError, suggestTaskDescriptionSchema } from "@/lib/validation";
 import { getPostHogServerClient } from "@/lib/posthog-server";
 
 /**
- * TaskFlow's one real LLM call: draft a short description from a task title,
- * via Vercel's AI Gateway (authenticated by OIDC on Vercel, no API key to
- * manage). Every call is captured as a $ai_generation event — this is the
+ * TaskFlow's one real LLM call: draft a short description from a task title.
+ * Through Ollama's cloud API rather than Vercel's AI Gateway — the Gateway
+ * needs a credit card on file before it'll serve even free-tier requests,
+ * which this account doesn't have yet. Ollama's cloud API is OpenAI-
+ * compatible, so the official @ai-sdk/openai-compatible provider talks to it
+ * directly. Every call is captured as a $ai_generation event — this is the
  * thing PostHog's LLM analytics actually has something to watch.
  */
-const MODEL = "anthropic/claude-haiku-4.5";
+const PROVIDER = "ollama";
+const MODEL_ID = "gpt-oss:20b-cloud";
+
+const ollama = createOpenAICompatible({
+  name: PROVIDER,
+  baseURL: "https://ollama.com/v1",
+  apiKey: process.env.OLLAMA_API_KEY,
+});
 
 export async function POST(request: Request) {
   const guard = await requireMember();
@@ -30,7 +41,10 @@ export async function POST(request: Request) {
   const started = Date.now();
 
   try {
-    const { text, usage } = await generateText({ model: MODEL, prompt });
+    const { text, usage } = await generateText({
+      model: ollama.chatModel(MODEL_ID),
+      prompt,
+    });
     const description = text.trim();
 
     const posthog = getPostHogServerClient();
@@ -40,8 +54,8 @@ export async function POST(request: Request) {
         event: "$ai_generation",
         properties: {
           $ai_trace_id: traceId,
-          $ai_model: MODEL.split("/")[1],
-          $ai_provider: MODEL.split("/")[0],
+          $ai_model: MODEL_ID,
+          $ai_provider: PROVIDER,
           $ai_input: [{ role: "user", content: prompt }],
           $ai_input_tokens: usage.inputTokens ?? 0,
           $ai_output_choices: [{ role: "assistant", content: description }],
@@ -60,8 +74,8 @@ export async function POST(request: Request) {
         event: "$ai_generation",
         properties: {
           $ai_trace_id: traceId,
-          $ai_model: MODEL.split("/")[1],
-          $ai_provider: MODEL.split("/")[0],
+          $ai_model: MODEL_ID,
+          $ai_provider: PROVIDER,
           $ai_input: [{ role: "user", content: prompt }],
           $ai_latency: (Date.now() - started) / 1000,
           $ai_is_error: true,

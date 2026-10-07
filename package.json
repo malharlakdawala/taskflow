@@ -11,6 +11,7 @@
     "postinstall": "prisma generate"
   },
   "dependencies": {
+    "@ai-sdk/openai-compatible": "^3.0.65",
     "@base-ui/react": "^1.6.0",
     "@hello-pangea/dnd": "^18.0.1",
     "@modelcontextprotocol/sdk": "^1.29.0",
