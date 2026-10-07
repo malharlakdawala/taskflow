@@ -240,6 +240,10 @@ export const updateVaultEntrySchema = z
     message: "No fields to update",
   });
 
+export const suggestTaskDescriptionSchema = z.object({
+  title: z.string().trim().min(1).max(300),
+});
+
 /** Turns a Zod failure into a 400-shaped payload. */
 export function formatZodError(error: z.ZodError) {
   return {

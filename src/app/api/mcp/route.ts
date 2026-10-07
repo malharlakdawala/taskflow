@@ -3,6 +3,11 @@ import { z } from "zod";
 import type { AppUser } from "@/lib/auth";
 import { bearerToken, userForToken } from "@/lib/mcp/tokens";
 import { McpToolError, TOOLS, TOOLS_BY_NAME } from "@/lib/mcp/tools";
+import {
+  captureMcpInitialize,
+  captureMcpToolCall,
+  captureMcpToolsList,
+} from "@/lib/mcp/analytics";
 import { reportError } from "@/lib/report-error";
 
 /**
@@ -163,6 +168,15 @@ async function dispatch(message: RpcRequest, actor: AppUser) {
           ? asked
           : LATEST_PROTOCOL_VERSION;
 
+      const clientInfo = message.params?.clientInfo;
+      await captureMcpInitialize(
+        actor,
+        typeof clientInfo === "object" && clientInfo !== null
+          ? (clientInfo as { name?: string; version?: string })
+          : undefined,
+        version
+      );
+
       return result(id, {
         protocolVersion: version,
         capabilities: { tools: { listChanged: false } },
@@ -178,14 +192,20 @@ async function dispatch(message: RpcRequest, actor: AppUser) {
     case "ping":
       return result(id, {});
 
-    case "tools/list":
-      return result(id, {
-        tools: TOOLS.map(({ name, description, inputSchema }) => ({
-          name,
-          description,
-          inputSchema,
-        })),
-      });
+    case "tools/list": {
+      const started = Date.now();
+      const tools = TOOLS.map(({ name, description, inputSchema }) => ({
+        name,
+        description,
+        inputSchema,
+      }));
+      await captureMcpToolsList(
+        actor,
+        tools.map((t) => t.name),
+        Date.now() - started
+      );
+      return result(id, { tools });
+    }
 
     case "tools/call":
       return callTool(id, message, actor);
@@ -203,6 +223,7 @@ async function dispatch(message: RpcRequest, actor: AppUser) {
 }
 
 async function callTool(id: Id, message: RpcRequest, actor: AppUser) {
+  const started = Date.now();
   const name = message.params?.name;
   if (typeof name !== "string") {
     return rpcError(id, INVALID_PARAMS, "tools/call needs a tool name");
@@ -213,26 +234,63 @@ async function callTool(id: Id, message: RpcRequest, actor: AppUser) {
     return rpcError(id, METHOD_NOT_FOUND, `Unknown tool: ${name}`);
   }
 
-  const args = tool.schema.safeParse(message.params?.arguments ?? {});
+  const rawArgs = message.params?.arguments ?? {};
+  const args = tool.schema.safeParse(rawArgs);
   if (!args.success) {
     // Returned as a tool error rather than a protocol error: the model wrote
     // these arguments and is the one that can correct them.
     const detail = args.error.issues
       .map((issue) => `${issue.path.join(".") || "(root)"}: ${issue.message}`)
       .join("; ");
+    await captureMcpToolCall(actor, {
+      toolName: name,
+      toolDescription: tool.description,
+      args: rawArgs,
+      durationMs: Date.now() - started,
+      isError: true,
+      errorType: "InvalidArguments",
+      errorMessage: detail,
+    });
     return toolFailure(id, `Invalid arguments for ${name} — ${detail}`);
   }
 
   try {
-    return toolResult(id, await tool.run(args.data, actor));
+    const output = await tool.run(args.data, actor);
+    await captureMcpToolCall(actor, {
+      toolName: name,
+      toolDescription: tool.description,
+      args: args.data,
+      durationMs: Date.now() - started,
+      isError: false,
+      result: output,
+    });
+    return toolResult(id, output);
   } catch (error) {
     if (error instanceof McpToolError) {
+      await captureMcpToolCall(actor, {
+        toolName: name,
+        toolDescription: tool.description,
+        args: args.data,
+        durationMs: Date.now() - started,
+        isError: true,
+        errorType: "McpToolError",
+        errorMessage: error.message,
+      });
       return toolFailure(id, error.message);
     }
     // An unexpected failure is ours, not the model's. Log it in full and hand
     // back something that doesn't leak internals into a context window.
     console.error(`[mcp] ${name} failed for ${actor.email}:`, error);
     reportError(`mcp.tool.${name}`, error);
+    await captureMcpToolCall(actor, {
+      toolName: name,
+      toolDescription: tool.description,
+      args: args.data,
+      durationMs: Date.now() - started,
+      isError: true,
+      errorType: error instanceof Error ? error.name : "UnknownError",
+      errorMessage: error instanceof Error ? error.message : String(error),
+    });
     return rpcError(id, INTERNAL_ERROR, `${name} failed. Try again.`);
   }
 }
