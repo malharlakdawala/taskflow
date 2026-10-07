@@ -29,6 +29,7 @@ import {
   Copy,
   Share2,
   ExternalLink,
+  Sparkles,
 } from "lucide-react";
 import Link from "next/link";
 import { TiptapEditor } from "@/components/editor/tiptap-editor";
@@ -77,6 +78,10 @@ export function CreateTaskDialog({
   const [attachments, setAttachments] = useState<PendingAttachment[]>([]);
   const [isUploading, setIsUploading] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
+  const [isSuggesting, setIsSuggesting] = useState(false);
+  // The editor is uncontrolled (see editorKey below), so a suggestion has to
+  // feed in as its initial content on a forced remount, not as a live prop.
+  const [aiContent, setAiContent] = useState("");
   const [editorKey, setEditorKey] = useState(0);
   const fileInputRef = useRef<HTMLInputElement>(null);
   // Set once the task exists, which swaps the form for its shareable link.
@@ -112,6 +117,7 @@ export function CreateTaskDialog({
   const reset = () => {
     setTitle("");
     setDescription("");
+    setAiContent("");
     setStatus(defaultStatus ?? "TODO");
     setPriority("NONE");
     setStartDate("");
@@ -120,6 +126,32 @@ export function CreateTaskDialog({
     setProjectId(defaultProjectId ?? null);
     setAttachments([]);
     setEditorKey((k) => k + 1);
+  };
+
+  const handleSuggestDescription = async () => {
+    if (!title.trim()) return;
+    setIsSuggesting(true);
+    try {
+      const response = await fetch("/api/tasks/suggest-description", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ title }),
+      });
+      const body = await response.json();
+      if (!response.ok) {
+        throw new Error(body?.error ?? "Could not generate a suggestion");
+      }
+      setAiContent(body.description);
+      setDescription(body.description);
+      setEditorKey((k) => k + 1);
+    } catch (error) {
+      notify.error(
+        "Could not generate a suggestion",
+        error instanceof Error ? error.message : undefined
+      );
+    } finally {
+      setIsSuggesting(false);
+    }
   };
 
   /**
@@ -264,10 +296,27 @@ export function CreateTaskDialog({
                 </div>
 
                 <div className="grid gap-2">
-                  <Label>Description</Label>
+                  <div className="flex items-center justify-between">
+                    <Label>Description</Label>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="xs"
+                      className="gap-1.5 text-muted-foreground"
+                      onClick={handleSuggestDescription}
+                      disabled={!title.trim() || isSuggesting}
+                    >
+                      {isSuggesting ? (
+                        <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                      ) : (
+                        <Sparkles className="h-3.5 w-3.5" />
+                      )}
+                      Suggest with AI
+                    </Button>
+                  </div>
                   <TiptapEditor
                     key={editorKey}
-                    content=""
+                    content={aiContent}
                     onChange={setDescription}
                     placeholder="Describe the task… paste or drag in images"
                   />
