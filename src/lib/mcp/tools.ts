@@ -34,6 +34,11 @@ import {
  * Projects can be listed, created, and filed into, but not renamed, archived
  * or deleted — reshaping how a workspace is organised is a decision someone
  * should make on the projects screen, where the task counts are visible.
+ *
+ * Phases are the exception, deliberately: splitting a big project into stages
+ * and filing its tasks into them is exactly the kind of bulk restructuring an
+ * agent is good at. Deleting a phase never deletes work — its tasks stay in
+ * the project, unphased.
  */
 
 const STATUSES = ["BACKLOG", "TODO", "IN_PROGRESS", "IN_REVIEW", "DONE"] as const;
@@ -97,6 +102,8 @@ const TASK_SUMMARY = {
   assignee: { select: { email: true, name: true } },
   // Named, not id'd: the name is what every project argument here expects back.
   project: { select: { name: true } },
+  // Same: what the `phase` argument expects back. Null when unphased.
+  phase: { select: { name: true } },
   // The raw id, kept internal to this module — every tool needs it to check
   // project access, even though callers only ever ask for a project by name.
   projectId: true,
@@ -181,6 +188,25 @@ async function resolveProject(
   return project.id;
 }
 
+/**
+ * Phases are addressed by name within their project, the same way projects
+ * are addressed by name. Case-insensitive, matching the unique index. The
+ * caller has already resolved — and access-checked — the project.
+ */
+async function resolvePhase(projectId: string | null, name: string): Promise<string> {
+  if (projectId === null) {
+    throw new McpToolError("A phase only exists inside a project — pass project too");
+  }
+  const phase = await prisma.phase.findFirst({
+    where: { projectId, name: { equals: name, mode: "insensitive" } },
+    select: { id: true },
+  });
+  if (!phase) {
+    throw new McpToolError(`No phase called "${name}" in that project — see list_phases`);
+  }
+  return phase.id;
+}
+
 /** YYYY-MM-DD or a full ISO timestamp; anything else is rejected loudly. */
 function parseDate(value: string | null | undefined): Date | null {
   if (!value) return null;
@@ -206,6 +232,7 @@ const createTask: McpTool = {
       due_date: str("Due date as YYYY-MM-DD"),
       assignee_email: str("Member to assign it to. Defaults to you."),
       project: str("Project name to file it under. Defaults to unfiled."),
+      phase: str("Phase name within that project. Requires project."),
     },
     ["title"]
   ),
@@ -218,6 +245,7 @@ const createTask: McpTool = {
     due_date: z.string().optional(),
     assignee_email: z.string().optional(),
     project: z.string().optional(),
+    phase: z.string().optional(),
   }),
   async run(args, actor) {
     const input = args as {
@@ -229,11 +257,13 @@ const createTask: McpTool = {
       due_date?: string;
       assignee_email?: string;
       project?: string;
+      phase?: string;
     };
 
     const assigneeId = await resolveAssignee(input.assignee_email);
     const projectId = await resolveProject(actor, input.project, { forFiling: true });
     await requireProjectAccess(actor, projectId, "EDITOR");
+    const phaseId = input.phase ? await resolvePhase(projectId, input.phase) : null;
     const status = input.status ?? "TODO";
 
     // Same ordering rule as the REST route: new work lands at the bottom of
@@ -255,6 +285,7 @@ const createTask: McpTool = {
         order: (last?.order ?? 0) + 1000,
         assigneeId: assigneeId ?? actor.id,
         projectId,
+        phaseId,
         createdById: actor.id,
       },
       select: TASK_SUMMARY,
@@ -277,13 +308,17 @@ const listTasks: McpTool = {
   name: "list_tasks",
   description:
     "List tasks, newest first, optionally filtered by status, priority, " +
-    "assignee or project.",
+    "assignee, project or phase.",
   inputSchema: object({
     status: enumOf(STATUSES, "Only tasks with this status"),
     priority: enumOf(PRIORITIES, "Only tasks with this priority"),
     assignee_email: str("Only tasks assigned to this member"),
     mine: { type: "boolean", description: "Only tasks assigned to you" },
     project: str("Only tasks in this project, by name"),
+    phase: str(
+      "Only tasks in this phase of the project, by name. Requires project. " +
+        "Pass an empty string for the project's tasks that are in no phase."
+    ),
     unfiled: {
       type: "boolean",
       description: "Only tasks that are in no project at all",
@@ -299,6 +334,7 @@ const listTasks: McpTool = {
     assignee_email: z.string().optional(),
     mine: z.boolean().optional(),
     project: z.string().optional(),
+    phase: z.string().optional(),
     unfiled: z.boolean().optional(),
     limit: z.number().int().min(1).max(100).optional(),
   }),
@@ -309,6 +345,7 @@ const listTasks: McpTool = {
       assignee_email?: string;
       mine?: boolean;
       project?: string;
+      phase?: string;
       unfiled?: boolean;
       limit?: number;
     };
@@ -323,6 +360,14 @@ const listTasks: McpTool = {
       ? actor.id
       : await resolveAssignee(input.assignee_email);
     const projectId = await resolveProject(actor, input.project);
+    // "" is how a text-only protocol says "no phase".
+    let phaseId: string | null | undefined;
+    if (input.phase !== undefined) {
+      if (projectId === null) {
+        throw new McpToolError("A phase only exists inside a project — pass project too");
+      }
+      phaseId = input.phase ? await resolvePhase(projectId, input.phase) : null;
+    }
 
     const tasks = await prisma.task.findMany({
       where: {
@@ -334,6 +379,7 @@ const listTasks: McpTool = {
         ...(assigneeId && { assigneeId }),
         ...(projectId && { projectId }),
         ...(input.unfiled && { projectId: null }),
+        ...(phaseId !== undefined && { phaseId }),
         // A project named here that this member can't see just yields no
         // rows, same as any other filter that happens to match nothing.
         ...accessibleTasksFilter(actor),
@@ -341,7 +387,7 @@ const listTasks: McpTool = {
       select: TASK_SUMMARY,
       relationLoadStrategy: "join",
       orderBy: { createdAt: "desc" },
-      take: input.limit ?? 20,
+      take: input.limit ?? (phaseId !== undefined ? 100 : 20),
     });
 
     return { count: tasks.length, tasks };
@@ -404,7 +450,8 @@ const updateTask: McpTool = {
   name: "update_task",
   description:
     "Change a task's title, description, status, priority, due date, " +
-    "assignee or project. Only the fields you pass are touched.",
+    "assignee, project or phase. Only the fields you pass are touched. " +
+    "Moving a task to another project drops its phase unless you pass one.",
   inputSchema: object(
     {
       task_id: str("Task id"),
@@ -416,6 +463,10 @@ const updateTask: McpTool = {
       due_date: str("New due date as YYYY-MM-DD, or empty string to clear it"),
       assignee_email: str("Member to reassign it to, or empty string to unassign"),
       project: str("Project name to move it to, or empty string to unfile it"),
+      phase: str(
+        "Phase name to file it under (within its project, or the new one if " +
+          "project is also passed), or empty string to unphase it"
+      ),
     },
     ["task_id"]
   ),
@@ -429,6 +480,7 @@ const updateTask: McpTool = {
     due_date: z.string().optional(),
     assignee_email: z.string().optional(),
     project: z.string().optional(),
+    phase: z.string().optional(),
   }),
   async run(args, actor) {
     const input = args as {
@@ -441,6 +493,7 @@ const updateTask: McpTool = {
       due_date?: string;
       assignee_email?: string;
       project?: string;
+      phase?: string;
     };
 
     const data: Prisma.TaskUncheckedUpdateInput = {};
@@ -471,7 +524,7 @@ const updateTask: McpTool = {
       data.projectId = nextProjectId;
     }
 
-    if (Object.keys(data).length === 0) {
+    if (Object.keys(data).length === 0 && input.phase === undefined) {
       throw new McpToolError("Nothing to update — pass at least one field");
     }
 
@@ -499,6 +552,17 @@ const updateTask: McpTool = {
     // project the task is leaving.
     if (nextProjectId !== undefined) {
       await requireProjectAccess(actor, nextProjectId, "EDITOR");
+    }
+
+    // A phase lives inside one project: resolve it against wherever the task
+    // ends up, and drop the old one when the task changes project without
+    // naming a new phase.
+    const targetProjectId =
+      nextProjectId !== undefined ? nextProjectId : before!.projectId;
+    if (input.phase !== undefined) {
+      data.phaseId = input.phase ? await resolvePhase(targetProjectId, input.phase) : null;
+    } else if (nextProjectId !== undefined && nextProjectId !== before!.projectId) {
+      data.phaseId = null;
     }
 
     let task;
@@ -777,6 +841,250 @@ const createProject: McpTool = {
   },
 };
 
+/**
+ * Every phase tool starts the same way: resolve the project by name, check the
+ * caller's role on it, and hand back its id.
+ */
+async function projectFor(
+  actor: AppUser,
+  name: string,
+  minRole: "VIEWER" | "EDITOR"
+): Promise<string> {
+  const projectId = (await resolveProject(actor, name, { forFiling: minRole === "EDITOR" }))!;
+  await requireProjectAccess(actor, projectId, minRole);
+  return projectId;
+}
+
+const duplicatePhase = (error: unknown, name: string) => {
+  if (
+    error instanceof Prisma.PrismaClientKnownRequestError &&
+    error.code === "P2002"
+  ) {
+    throw new McpToolError(`That project already has a phase called "${name}"`);
+  }
+  throw error;
+};
+
+const PHASE_FIELDS = {
+  name: true,
+  description: true,
+  startDate: true,
+  endDate: true,
+} satisfies Prisma.PhaseSelect;
+
+const listPhases: McpTool = {
+  name: "list_phases",
+  description:
+    "A project's phases (stages) in order, with how many tasks are in each " +
+    "and how many are done. Names from here are what the `phase` argument " +
+    "on the task tools expects.",
+  inputSchema: object({ project: str("Project name") }, ["project"]),
+  schema: z.object({ project: z.string().trim().min(1) }),
+  async run(args, actor) {
+    const { project } = args as { project: string };
+    const projectId = await projectFor(actor, project, "VIEWER");
+
+    const [phases, all, done, unphased] = await Promise.all([
+      prisma.phase.findMany({
+        where: { projectId },
+        select: { id: true, ...PHASE_FIELDS },
+        orderBy: [{ order: "asc" }, { createdAt: "asc" }],
+      }),
+      prisma.task.groupBy({
+        by: ["phaseId"],
+        where: { projectId, parentId: null },
+        _count: { _all: true },
+      }),
+      prisma.task.groupBy({
+        by: ["phaseId"],
+        where: { projectId, parentId: null, status: "DONE" },
+        _count: { _all: true },
+      }),
+      prisma.task.count({ where: { projectId, parentId: null, phaseId: null } }),
+    ]);
+
+    const tally = (rows: typeof all, id: string) =>
+      rows.find((row) => row.phaseId === id)?._count._all ?? 0;
+
+    return {
+      count: phases.length,
+      phases: phases.map(({ id, ...phase }) => ({
+        ...phase,
+        taskCount: tally(all, id),
+        doneCount: tally(done, id),
+      })),
+      unphasedTaskCount: unphased,
+    };
+  },
+};
+
+const createPhase: McpTool = {
+  name: "create_phase",
+  description:
+    "Add a phase (stage) to a project, after its existing ones. Names are " +
+    "unique within a project, ignoring case.",
+  inputSchema: object(
+    {
+      project: str("Project name"),
+      name: str("Phase name, e.g. \"Phase 1: Onboarding agent\""),
+      description: str("What this phase covers"),
+      start_date: str("Planned start as YYYY-MM-DD"),
+      end_date: str("Planned end as YYYY-MM-DD"),
+    },
+    ["project", "name"]
+  ),
+  schema: z.object({
+    project: z.string().trim().min(1),
+    name: z.string().trim().min(1).max(120),
+    description: z.string().trim().max(2000).optional(),
+    start_date: z.string().optional(),
+    end_date: z.string().optional(),
+  }),
+  async run(args, actor) {
+    const input = args as {
+      project: string;
+      name: string;
+      description?: string;
+      start_date?: string;
+      end_date?: string;
+    };
+    const projectId = await projectFor(actor, input.project, "EDITOR");
+
+    const last = await prisma.phase.findFirst({
+      where: { projectId },
+      orderBy: { order: "desc" },
+      select: { order: true },
+    });
+
+    try {
+      const phase = await prisma.phase.create({
+        data: {
+          projectId,
+          name: input.name,
+          description: input.description || null,
+          startDate: parseDate(input.start_date),
+          endDate: parseDate(input.end_date),
+          order: (last?.order ?? 0) + 1000,
+        },
+        select: PHASE_FIELDS,
+      });
+      return { phase };
+    } catch (error) {
+      return duplicatePhase(error, input.name);
+    }
+  },
+};
+
+const updatePhase: McpTool = {
+  name: "update_phase",
+  description:
+    "Rename a phase, change its description or dates, or move it to another " +
+    "position. Only the fields you pass are touched.",
+  inputSchema: object(
+    {
+      project: str("Project name"),
+      phase: str("Current phase name"),
+      new_name: str("New name"),
+      description: str("New description, or empty string to clear it"),
+      start_date: str("New planned start as YYYY-MM-DD, or empty string to clear it"),
+      end_date: str("New planned end as YYYY-MM-DD, or empty string to clear it"),
+      position: {
+        type: "number",
+        description: "New 1-based position among the project's phases",
+      },
+    },
+    ["project", "phase"]
+  ),
+  schema: z.object({
+    project: z.string().trim().min(1),
+    phase: z.string().trim().min(1),
+    new_name: z.string().trim().min(1).max(120).optional(),
+    description: z.string().trim().max(2000).optional(),
+    start_date: z.string().optional(),
+    end_date: z.string().optional(),
+    position: z.number().int().min(1).optional(),
+  }),
+  async run(args, actor) {
+    const input = args as {
+      project: string;
+      phase: string;
+      new_name?: string;
+      description?: string;
+      start_date?: string;
+      end_date?: string;
+      position?: number;
+    };
+    const projectId = await projectFor(actor, input.project, "EDITOR");
+    const phaseId = await resolvePhase(projectId, input.phase);
+
+    const data: Prisma.PhaseUncheckedUpdateInput = {};
+    if (input.new_name !== undefined) data.name = input.new_name;
+    if (input.description !== undefined) data.description = input.description || null;
+    if (input.start_date !== undefined) data.startDate = parseDate(input.start_date);
+    if (input.end_date !== undefined) data.endDate = parseDate(input.end_date);
+
+    if (input.position !== undefined) {
+      // Slot between the neighbours at the requested position, the same
+      // fractional trick the board uses for task order.
+      const others = await prisma.phase.findMany({
+        where: { projectId, id: { not: phaseId } },
+        select: { order: true },
+        orderBy: [{ order: "asc" }, { createdAt: "asc" }],
+      });
+      const index = Math.min(input.position - 1, others.length);
+      const prev = others[index - 1]?.order;
+      const next = others[index]?.order;
+      data.order =
+        prev === undefined && next === undefined
+          ? 1000
+          : prev === undefined
+            ? next! - 1000
+            : next === undefined
+              ? prev + 1000
+              : (prev + next) / 2;
+    }
+
+    if (Object.keys(data).length === 0) {
+      throw new McpToolError("Nothing to update — pass at least one field");
+    }
+
+    try {
+      const phase = await prisma.phase.update({
+        where: { id: phaseId },
+        data,
+        select: PHASE_FIELDS,
+      });
+      return { phase };
+    } catch (error) {
+      return duplicatePhase(error, input.new_name ?? input.phase);
+    }
+  },
+};
+
+const deletePhase: McpTool = {
+  name: "delete_phase",
+  description:
+    "Remove a phase from a project. Its tasks are NOT deleted — they stay in " +
+    "the project with no phase.",
+  inputSchema: object(
+    { project: str("Project name"), phase: str("Phase name") },
+    ["project", "phase"]
+  ),
+  schema: z.object({
+    project: z.string().trim().min(1),
+    phase: z.string().trim().min(1),
+  }),
+  async run(args, actor) {
+    const input = args as { project: string; phase: string };
+    const projectId = await projectFor(actor, input.project, "EDITOR");
+    const phaseId = await resolvePhase(projectId, input.phase);
+
+    const unphased = await prisma.task.count({ where: { phaseId } });
+    await prisma.phase.delete({ where: { id: phaseId } });
+    return { deleted: input.phase, tasksUnphased: unphased };
+  },
+};
+
 export const TOOLS: McpTool[] = [
   listTasks,
   getTask,
@@ -788,6 +1096,10 @@ export const TOOLS: McpTool[] = [
   listMembers,
   listProjects,
   createProject,
+  listPhases,
+  createPhase,
+  updatePhase,
+  deletePhase,
 ];
 
 export const TOOLS_BY_NAME = new Map(TOOLS.map((tool) => [tool.name, tool]));

@@ -122,12 +122,22 @@ export async function PATCH(request: Request) {
           .filter((task) => task.assigneeId !== nextAssigneeId)
           .map((task) => task.id);
 
+  // A phase belongs to one project, so rows that are changing project lose
+  // theirs. Rows already in the destination keep it.
+  const changingProject =
+    projectId === undefined
+      ? []
+      : before.filter((task) => task.projectId !== projectId).map((task) => task.id);
+
   let result;
   try {
-    result = await prisma.task.updateMany({
-      where: { id: { in: ids } },
-      data,
-    });
+    [result] = await prisma.$transaction([
+      prisma.task.updateMany({ where: { id: { in: ids } }, data }),
+      prisma.task.updateMany({
+        where: { id: { in: changingProject } },
+        data: { phaseId: null },
+      }),
+    ]);
   } catch (error) {
     if (
       error instanceof Prisma.PrismaClientKnownRequestError &&

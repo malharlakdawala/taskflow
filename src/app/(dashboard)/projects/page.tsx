@@ -11,6 +11,7 @@ import {
   FolderPlus,
   GanttChartSquare,
   KeyRound,
+  Layers,
   Pencil,
   Plus,
   Trash2,
@@ -18,6 +19,7 @@ import {
 } from "lucide-react";
 import { ProjectDialog } from "@/components/projects/project-dialog";
 import { ProjectMembersDialog } from "@/components/projects/project-members-dialog";
+import { ProjectPhasesDialog } from "@/components/projects/project-phases-dialog";
 import { ProjectDot } from "@/components/projects/project-badge";
 import { notify } from "@/lib/notify";
 import { useProjects, invalidateProjects } from "@/lib/use-projects";
@@ -33,6 +35,7 @@ export default function ProjectsPage() {
   const [editing, setEditing] = useState<Project | null>(null);
   const [deleting, setDeleting] = useState<Project | null>(null);
   const [managingMembers, setManagingMembers] = useState<Project | null>(null);
+  const [managingPhases, setManagingPhases] = useState<Project | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
   // Bumped on every open so ProjectDialog remounts with fresh fields — see the
   // note on that component about why it initialises once rather than resyncing.
@@ -180,6 +183,12 @@ export default function ProjectsPage() {
           <Button size="sm" variant="ghost" render={<Link href={`/projects/${project.id}/gantt`} />}>
             <GanttChartSquare className="mr-1 h-3.5 w-3.5" />
             Gantt
+          </Button>
+          {/* Everyone on the project can see its phases; the dialog itself
+              hides the editing controls from a VIEWER. */}
+          <Button size="sm" variant="ghost" onClick={() => setManagingPhases(project)}>
+            <Layers className="mr-1 h-3.5 w-3.5" />
+            Phases
           </Button>
           {/* A VIEWER can look at a project's tasks but not reshape the
               project itself — editing, membership and deletion are an
@@ -340,6 +349,12 @@ export default function ProjectsPage() {
         key={managingMembers?.id ?? "none"}
         project={managingMembers}
         onOpenChange={(open) => !open && setManagingMembers(null)}
+      />
+
+      <ProjectPhasesDialog
+        key={managingPhases?.id ?? "none"}
+        project={managingPhases}
+        onOpenChange={(open) => !open && setManagingPhases(null)}
       />
     </div>
   );

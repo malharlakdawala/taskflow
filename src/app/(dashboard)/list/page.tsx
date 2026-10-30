@@ -25,6 +25,8 @@ import {
   DueDateCell,
 } from "@/components/tasks/inline-fields";
 import { ProjectBadge } from "@/components/projects/project-badge";
+import { PhaseBadge, PhaseFilter, UNPHASED } from "@/components/projects/phase-picker";
+import { usePhases } from "@/lib/use-phases";
 import {
   ProjectFilter,
   UNFILED_PROJECT,
@@ -126,6 +128,8 @@ type Filters = {
   overdue: boolean;
   /** A project id, or UNFILED for tasks in no project at all. */
   project: string | null;
+  /** A phase id, or UNPHASED. Only meaningful with a real project filter. */
+  phase: string | null;
   /** Keywords, as handed over by the global search palette. */
   q: string | null;
 };
@@ -138,6 +142,7 @@ const isActive = (filters: Filters) =>
   filters.priority !== null ||
   filters.overdue ||
   filters.project !== null ||
+  filters.phase !== null ||
   filters.q !== null;
 
 /**
@@ -170,6 +175,7 @@ function parseFilters(params: URLSearchParams): Filters {
     // Not checked against the real list: an id for a deleted project simply
     // matches nothing, which is a better outcome than a crash or a silent reset.
     project: params.get("project") || null,
+    phase: params.get("project") ? params.get("phase") || null : null,
     q: params.get("q")?.trim() || null,
   };
 }
@@ -183,6 +189,9 @@ function urlWithout(filters: Filters, drop: keyof Filters): string {
   if (drop !== "overdue" && filters.overdue) next.set("due", "overdue");
   if (drop !== "project" && filters.project)
     next.set("project", filters.project);
+  // A phase is part of its project — dropping the project drops it too.
+  if (drop !== "project" && drop !== "phase" && filters.phase)
+    next.set("phase", filters.phase);
   if (drop !== "q" && filters.q) next.set("q", filters.q);
   const query = next.toString();
   return query ? `/list?${query}` : "/list";
@@ -211,6 +220,9 @@ function ListView() {
   );
   // Only for naming the active filter chip — the tasks carry their own project.
   const { projects } = useProjects();
+  const filteredProjectId =
+    filters.project && filters.project !== UNFILED ? filters.project : null;
+  const { phases } = usePhases(filteredProjectId);
   const [tasks, setTasks] = useState<Task[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
@@ -275,6 +287,13 @@ function ListView() {
           return false;
         }
       }
+      if (filters.phase) {
+        if (filters.phase === UNPHASED) {
+          if (task.phaseId !== null) return false;
+        } else if (task.phaseId !== filters.phase) {
+          return false;
+        }
+      }
       return true;
     });
   }, [tasks, filters, terms, loadedAt]);
@@ -315,6 +334,13 @@ function ListView() {
         ? NO_PROJECT_LABEL
         : projects.find((project) => project.id === filters.project)?.name;
     chips.push({ key: "project", label: `Project: ${name ?? "unknown"}` });
+  }
+  if (filters.phase) {
+    const name =
+      filters.phase === UNPHASED
+        ? "No phase"
+        : phases.find((phase) => phase.id === filters.phase)?.name;
+    chips.push({ key: "phase", label: `Phase: ${name ?? "unknown"}` });
   }
 
   /** Optimistic: the row changes instantly and reverts if the save fails. */
@@ -388,8 +414,17 @@ function ListView() {
     const params = new URLSearchParams(searchParams.toString());
     if (next) params.set("project", next);
     else params.delete("project");
+    // Phases don't carry across projects.
+    params.delete("phase");
     const query = params.toString();
     router.push(query ? `/list?${query}` : "/list");
+  };
+
+  const setPhaseFilter = (next: string | null) => {
+    const params = new URLSearchParams(searchParams.toString());
+    if (next) params.set("phase", next);
+    else params.delete("phase");
+    router.push(`/list?${params.toString()}`);
   };
 
   /** Same pattern as the project filter — sort lives in the URL too. */
@@ -419,6 +454,13 @@ function ListView() {
           </div>
           <div className="flex shrink-0 items-center gap-2">
             <ProjectFilter value={filters.project} onChange={setProjectFilter} />
+            {filteredProjectId && (
+              <PhaseFilter
+                projectId={filteredProjectId}
+                value={filters.phase}
+                onChange={setPhaseFilter}
+              />
+            )}
             <Select
               items={SORT_ITEMS}
               value={sort}
@@ -662,6 +704,12 @@ function ListView() {
                                         className="max-w-[9rem] shrink-0"
                                       />
                                     )}
+                                    {task.phase && task.phaseId !== filters.phase && (
+                                      <PhaseBadge
+                                        phase={task.phase}
+                                        className="max-w-[9rem] shrink-0"
+                                      />
+                                    )}
                                     {task.commentCount > 0 && (
                                       <span className="inline-flex shrink-0 items-center gap-0.5 text-[11px] text-muted-foreground">
                                         <MessageSquare className="h-3 w-3" />
@@ -738,6 +786,11 @@ function ListView() {
         // otherwise the task you just made vanishes from the view you made it in.
         defaultProjectId={
           filters.project && filters.project !== UNFILED ? filters.project : null
+        }
+        defaultPhaseId={
+          filteredProjectId && filters.phase && filters.phase !== UNPHASED
+            ? filters.phase
+            : null
         }
         onTaskCreated={(task) => setTasks((prev) => [task, ...prev])}
       />

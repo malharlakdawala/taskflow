@@ -35,6 +35,7 @@ import Link from "next/link";
 import { TiptapEditor } from "@/components/editor/tiptap-editor";
 import { AssigneePicker } from "@/components/tasks/assignee-picker";
 import { ProjectPicker } from "@/components/projects/project-picker";
+import { PhasePicker } from "@/components/projects/phase-picker";
 import { notify } from "@/lib/notify";
 import type { Task, TaskStatus, TaskPriority } from "@/lib/types";
 import { STATUS_ITEMS, PRIORITY_ITEMS } from "@/lib/types";
@@ -55,6 +56,8 @@ interface CreateTaskDialogProps {
   defaultStatus?: TaskStatus;
   /** Preselects the project, so creating from a filtered list stays in it. */
   defaultProjectId?: string | null;
+  /** Preselects the phase — only meaningful alongside defaultProjectId. */
+  defaultPhaseId?: string | null;
 }
 
 export function CreateTaskDialog({
@@ -63,6 +66,7 @@ export function CreateTaskDialog({
   onTaskCreated,
   defaultStatus,
   defaultProjectId,
+  defaultPhaseId,
 }: CreateTaskDialogProps) {
   const posthog = usePostHog();
   const [title, setTitle] = useState("");
@@ -75,6 +79,7 @@ export function CreateTaskDialog({
   const [projectId, setProjectId] = useState<string | null>(
     defaultProjectId ?? null,
   );
+  const [phaseId, setPhaseId] = useState<string | null>(defaultPhaseId ?? null);
   const [attachments, setAttachments] = useState<PendingAttachment[]>([]);
   const [isUploading, setIsUploading] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
@@ -114,6 +119,14 @@ export function CreateTaskDialog({
     }
   }, [open, defaultProjectId]);
 
+  const lastDefaultPhase = useRef(defaultPhaseId);
+  useEffect(() => {
+    if (open && lastDefaultPhase.current !== defaultPhaseId) {
+      lastDefaultPhase.current = defaultPhaseId;
+      setPhaseId(defaultPhaseId ?? null);
+    }
+  }, [open, defaultPhaseId]);
+
   const reset = () => {
     setTitle("");
     setDescription("");
@@ -124,6 +137,7 @@ export function CreateTaskDialog({
     setDueDate("");
     setAssigneeId(null);
     setProjectId(defaultProjectId ?? null);
+    setPhaseId(defaultPhaseId ?? null);
     setAttachments([]);
     setEditorKey((k) => k + 1);
   };
@@ -210,6 +224,7 @@ export function CreateTaskDialog({
           dueDate: dueDate || null,
           assigneeId,
           projectId,
+          phaseId,
         }),
       });
 
@@ -384,7 +399,15 @@ export function CreateTaskDialog({
                 <div className="grid grid-cols-2 gap-4 sm:grid-cols-3">
                   <div className="grid gap-2">
                     <Label>Project</Label>
-                    <ProjectPicker value={projectId} onChange={setProjectId} />
+                    <ProjectPicker
+                      value={projectId}
+                      onChange={(next) => {
+                        // A phase belongs to one project — switching project drops it.
+                        if (next !== projectId) setPhaseId(null);
+                        setProjectId(next);
+                      }}
+                    />
+                    <PhasePicker projectId={projectId} value={phaseId} onChange={setPhaseId} />
                   </div>
                   <div className="grid gap-2">
                     <Label>Status</Label>

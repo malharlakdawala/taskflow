@@ -92,6 +92,29 @@ export interface ProjectSummary {
   archived: boolean;
 }
 
+/** What a task payload carries about the phase it belongs to. */
+export interface PhaseSummary {
+  id: string;
+  name: string;
+  order: number;
+}
+
+/** An ordered stage inside one project. */
+export interface Phase extends PhaseSummary {
+  projectId: string;
+  description: string | null;
+  startDate: string | null;
+  endDate: string | null;
+  /** How many top-level tasks are filed here, and how many of those are done. */
+  taskCount: number;
+  doneCount: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+/** The label a phase picker shows for "in the project, but in no phase". */
+export const NO_PHASE_LABEL = "No phase";
+
 /** VIEWER reads a project's tasks; EDITOR can also create, edit and delete them. */
 export type ProjectRole = "VIEWER" | "EDITOR";
 
@@ -140,6 +163,9 @@ export interface Task {
   /** Null means unfiled — the UI calls this "No project". */
   projectId: string | null;
   project: ProjectSummary | null;
+  /** Null means unphased. Only ever a phase of `projectId`. */
+  phaseId: string | null;
+  phase: PhaseSummary | null;
   assigneeId: string | null;
   assignee: User | null;
   createdById: string | null;
