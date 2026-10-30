@@ -13,8 +13,10 @@ import {
   MessageSquare,
   Paperclip,
   ArrowUpDown,
+  Layers,
   X,
 } from "lucide-react";
+import { ProjectPhasesDialog } from "@/components/projects/project-phases-dialog";
 import { CreateTaskDialog } from "@/components/tasks/create-task-dialog";
 import { BulkActionBar } from "@/components/tasks/bulk-action-bar";
 import { StatusDot } from "@/components/tasks/status-badge";
@@ -223,6 +225,9 @@ function ListView() {
   const filteredProjectId =
     filters.project && filters.project !== UNFILED ? filters.project : null;
   const { phases } = usePhases(filteredProjectId);
+  const filteredProject =
+    projects.find((project) => project.id === filteredProjectId) ?? null;
+  const [isPhasesOpen, setIsPhasesOpen] = useState(false);
   const [tasks, setTasks] = useState<Task[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
@@ -460,6 +465,14 @@ function ListView() {
                 value={filters.phase}
                 onChange={setPhaseFilter}
               />
+            )}
+            {/* Where phases are added and renamed — next to the project they
+                belong to, so splitting a project up doesn't mean leaving it. */}
+            {filteredProject && (
+              <Button variant="outline" className="gap-2" onClick={() => setIsPhasesOpen(true)}>
+                <Layers className="h-4 w-4" />
+                Phases
+              </Button>
             )}
             <Select
               items={SORT_ITEMS}
@@ -777,6 +790,13 @@ function ListView() {
           setSelected(new Set());
         }}
       />
+
+      {isPhasesOpen && (
+        <ProjectPhasesDialog
+          project={filteredProject}
+          onOpenChange={(open) => !open && setIsPhasesOpen(false)}
+        />
+      )}
 
       <CreateTaskDialog
         open={isCreateDialogOpen}
