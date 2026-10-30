@@ -42,6 +42,7 @@ import { CommentList } from "@/components/tasks/comment-list";
 import { SubtaskList } from "@/components/tasks/subtask-list";
 import { AssigneePicker } from "@/components/tasks/assignee-picker";
 import { ProjectPicker } from "@/components/projects/project-picker";
+import { PhasePicker } from "@/components/projects/phase-picker";
 import { UserChip } from "@/components/tasks/user-chip";
 import { StatusBadge, PriorityBadge, StatusDot } from "@/components/tasks/status-badge";
 import { cn } from "@/lib/utils";
@@ -685,6 +686,15 @@ export default function TaskDetailPage() {
                     value={task.projectId}
                     onChange={(projectId) => patch({ projectId })}
                   />
+                  {/* Renders nothing until the project has phases. Subtasks
+                      follow their parent, so they don't pick one either. */}
+                  {!task.parentId && (
+                    <PhasePicker
+                      projectId={task.projectId}
+                      value={task.phaseId}
+                      onChange={(phaseId) => patch({ phaseId })}
+                    />
+                  )}
                 </div>
 
                 <Separator />

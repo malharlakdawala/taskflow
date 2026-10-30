@@ -6,6 +6,7 @@ import { sanitizeOrNull } from "@/lib/sanitize";
 import { createTaskSchema, formatZodError } from "@/lib/validation";
 import { notifyTaskAssigned } from "@/lib/notifications/dispatch";
 import { checkParent } from "@/lib/tasks-parent";
+import { phaseBelongsTo } from "@/lib/phase-access";
 import { accessibleTasksFilter, requireTaskProjectRole } from "@/lib/project-access";
 import {
   TASK_LIST_SELECT,
@@ -49,7 +50,7 @@ export async function POST(request: Request) {
     return NextResponse.json(formatZodError(parsed.error), { status: 400 });
   }
 
-  const { title, description, status, priority, startDate, dueDate, assigneeId, projectId, parentId } =
+  const { title, description, status, priority, startDate, dueDate, assigneeId, projectId, phaseId, parentId } =
     parsed.data;
   const resolvedStatus = status ?? "TODO";
 
@@ -68,6 +69,13 @@ export async function POST(request: Request) {
     "EDITOR"
   );
   if (accessRejection) return accessRejection;
+
+  if (phaseId && !(await phaseBelongsTo(phaseId, resolvedProjectId))) {
+    return NextResponse.json(
+      { error: "That phase isn't part of the task's project" },
+      { status: 400 }
+    );
+  }
 
   const last = await prisma.task.findFirst({
     where: { status: resolvedStatus },
@@ -88,6 +96,7 @@ export async function POST(request: Request) {
         order: (last?.order ?? 0) + 1000,
         // Null is the default: a task filed nowhere is unfiled, not invalid.
         projectId: resolvedProjectId,
+        phaseId: phaseId ?? null,
         assigneeId: assigneeId ?? guard.user.id,
         createdById: guard.user.id,
         parentId: parentId ?? null,

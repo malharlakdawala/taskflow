@@ -39,6 +39,8 @@ export const createTaskSchema = z.object({
   assigneeId: z.uuid().nullish(),
   /** Null files the task nowhere, which is the default. */
   projectId: z.uuid().nullish(),
+  /** A phase of `projectId`. Null (the default) leaves it unphased. */
+  phaseId: z.uuid().nullish(),
   /** Set to file this task as a subtask of another. Null (the default) is top-level. */
   parentId: z.uuid().nullish(),
 });
@@ -57,6 +59,8 @@ export const updateTaskSchema = z
     dueDate: dueDateSchema,
     assigneeId: z.uuid().nullable(),
     projectId: z.uuid().nullable(),
+    /** Must be a phase of the task's (possibly new) project. */
+    phaseId: z.uuid().nullable(),
     order: z.number().finite(),
     /** Null promotes a subtask back to top-level. */
     parentId: z.uuid().nullable(),
@@ -120,6 +124,27 @@ export const updateProjectSchema = z
     description: z.string().trim().max(2000).nullable(),
     color: z.enum(PROJECT_COLORS).nullable(),
     archived: z.boolean(),
+  })
+  .partial()
+  .refine((data) => Object.keys(data).length > 0, {
+    message: "No fields to update",
+  });
+
+/** Phases: names are unique per project, ignoring case (database index). */
+export const createPhaseSchema = z.object({
+  name: z.string().trim().min(1, "Name is required").max(120),
+  description: z.string().trim().max(2000).nullish(),
+  startDate: dueDateSchema.optional(),
+  endDate: dueDateSchema.optional(),
+});
+
+export const updatePhaseSchema = z
+  .object({
+    name: z.string().trim().min(1, "Name is required").max(120),
+    description: z.string().trim().max(2000).nullable(),
+    startDate: dueDateSchema,
+    endDate: dueDateSchema,
+    order: z.number().finite(),
   })
   .partial()
   .refine((data) => Object.keys(data).length > 0, {

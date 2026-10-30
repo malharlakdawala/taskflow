@@ -152,6 +152,9 @@ model Project {
   /// unfiled and stays visible to every active member regardless.
   members     ProjectMember[]
   vaultEntries VaultEntry[]
+  /// Ordered stages the project's work is split into. Optional — a project
+  /// with no phases behaves exactly as it always did.
+  phases      Phase[]
   createdAt   DateTime        @default(now()) @db.Timestamptz(6)
   updatedAt   DateTime        @updatedAt @db.Timestamptz(6)
 }
@@ -180,6 +183,29 @@ model VaultEntry {
   updatedAt   DateTime @updatedAt @db.Timestamptz(6)
 
   @@index([projectId], map: "VaultEntry_projectId_idx")
+}
+
+/// An ordered stage inside one project ("Phase 1: Onboarding agent"). Tasks
+/// may be filed into one; deleting a phase unphases its tasks rather than
+/// deleting them.
+///
+/// Note: the database also holds a case-insensitive unique index on
+/// (projectId, name) — `Phase_projectId_name_lower_key` — which, like the
+/// project one, Prisma cannot express. A duplicate arrives as P2002.
+model Phase {
+  id          String    @id @default(uuid()) @db.Uuid
+  projectId   String    @db.Uuid
+  project     Project   @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  name        String
+  description String?
+  order       Float     @default(0)
+  startDate   DateTime? @db.Timestamptz(6)
+  endDate     DateTime? @db.Timestamptz(6)
+  tasks       Task[]
+  createdAt   DateTime  @default(now()) @db.Timestamptz(6)
+  updatedAt   DateTime  @updatedAt @db.Timestamptz(6)
+
+  @@index([projectId, order], map: "Phase_projectId_order_idx")
 }
 
 enum ProjectRole {
@@ -221,6 +247,10 @@ model Task {
   /// Null means unfiled. Deleting a project clears this rather than the task.
   projectId     String?        @db.Uuid
   project       Project?       @relation(fields: [projectId], references: [id], onDelete: SetNull)
+  /// Null means unphased. Always a phase of `projectId` — the API clears it
+  /// whenever the task changes project, and refuses one from another project.
+  phaseId       String?        @db.Uuid
+  phase         Phase?         @relation(fields: [phaseId], references: [id], onDelete: SetNull)
   assigneeId    String?        @db.Uuid
   assignee      User?          @relation("TaskAssignee", fields: [assigneeId], references: [id], onDelete: SetNull)
   createdById   String?        @db.Uuid
@@ -246,6 +276,7 @@ model Task {
   @@index([priority], map: "Task_priority_idx")
   @@index([status, order], map: "Task_order_idx")
   @@index([projectId], map: "Task_projectId_idx")
+  @@index([phaseId], map: "Task_phaseId_idx")
   @@index([parentId], map: "Task_parentId_idx")
 }
 

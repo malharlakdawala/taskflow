@@ -2,6 +2,7 @@ import type { Prisma } from "@/generated/prisma/client";
 import { sanitizeRichText } from "@/lib/sanitize";
 import { toRichHtml } from "@/lib/rich-text";
 import { PROJECT_SUMMARY, serializeProjectSummary } from "@/lib/projects";
+import { PHASE_SUMMARY } from "@/lib/phases";
 
 /** Only the user fields the UI renders — never leak approval state into task payloads. */
 const USER_SUMMARY = {
@@ -27,6 +28,7 @@ export const TASK_LIST_SELECT = {
   dueDate: true,
   order: true,
   projectId: true,
+  phaseId: true,
   assigneeId: true,
   createdById: true,
   // Always null here — the board/list/calendar query filters to top-level
@@ -36,6 +38,7 @@ export const TASK_LIST_SELECT = {
   createdAt: true,
   updatedAt: true,
   project: { select: PROJECT_SUMMARY },
+  phase: { select: PHASE_SUMMARY },
   assignee: { select: USER_SUMMARY },
   createdBy: { select: USER_SUMMARY },
   _count: { select: { comments: true, attachments: true } },
@@ -56,6 +59,7 @@ const SUBTASK_SELECT = {
 /** Full shape for the single-task detail page. */
 export const TASK_DETAIL_INCLUDE = {
   project: { select: PROJECT_SUMMARY },
+  phase: { select: PHASE_SUMMARY },
   assignee: { select: USER_SUMMARY },
   createdBy: { select: USER_SUMMARY },
   // Enough to link back to the task this one is filed under. Null on

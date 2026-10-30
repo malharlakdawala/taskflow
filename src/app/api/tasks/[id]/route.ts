@@ -5,6 +5,7 @@ import { requireMember } from "@/lib/auth";
 import { sanitizeOrNull } from "@/lib/sanitize";
 import { updateTaskSchema, formatZodError } from "@/lib/validation";
 import { checkParent } from "@/lib/tasks-parent";
+import { phaseBelongsTo } from "@/lib/phase-access";
 import { requireTaskProjectRole } from "@/lib/project-access";
 import { TASK_DETAIL_INCLUDE, serializeTask } from "@/lib/tasks";
 import {
@@ -65,6 +66,7 @@ export async function PATCH(
     dueDate,
     assigneeId,
     projectId,
+    phaseId,
     order,
     parentId,
   } = parsed.data;
@@ -134,6 +136,23 @@ export async function PATCH(
       "EDITOR"
     );
     if (destinationAccess) return destinationAccess;
+  }
+
+  // A phase belongs to one project. Moving a task to another project drops
+  // its phase unless this same PATCH names one in the destination; naming a
+  // phase checks it against wherever the task will end up.
+  if (phaseId !== undefined) {
+    const targetProjectId =
+      data.projectId !== undefined ? (data.projectId as string | null) : before.projectId;
+    if (phaseId !== null && !(await phaseBelongsTo(phaseId, targetProjectId))) {
+      return NextResponse.json(
+        { error: "That phase isn't part of the task's project" },
+        { status: 400 }
+      );
+    }
+    data.phaseId = phaseId;
+  } else if (data.projectId !== undefined && data.projectId !== before.projectId) {
+    data.phaseId = null;
   }
 
   const previousAssigneeId = before.assigneeId ?? null;
