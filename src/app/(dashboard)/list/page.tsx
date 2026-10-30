@@ -115,6 +115,11 @@ const GROUPS: TaskStatus[] = [
  * kept to what their widest badge actually needs — every pixel they don't use
  * goes to the title, which is the one column whose content nobody can guess.
  */
+const GROUPING_ITEMS: Record<string, string> = {
+  phase: "Group by phase",
+  status: "Group by status",
+};
+
 const GRID =
   "grid grid-cols-[36px_minmax(0,1fr)_128px_104px_152px_104px] items-center gap-3";
 
@@ -233,7 +238,9 @@ function ListView() {
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
   const [createIn, setCreateIn] = useState<TaskStatus | undefined>();
   const [selected, setSelected] = useState<Set<string>>(new Set());
-  const [collapsed, setCollapsed] = useState<Set<TaskStatus>>(new Set());
+  const [createInPhase, setCreateInPhase] = useState<string | null>(null);
+  // Keys are statuses or phase ids, depending on how the list is grouped.
+  const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
   /**
    * "Overdue" is measured against when the data arrived, not when React
    * happens to re-render. Reading the clock during render would make the
@@ -312,12 +319,66 @@ function ListView() {
     return map;
   }, [visible, sort]);
 
-  // Filtering down to one status and still showing four empty "Add a task to…"
-  // sections reads as broken, so empty groups drop out while a filter is on.
-  const groups = useMemo(
-    () => (isActive(filters) ? GROUPS.filter((s) => grouped[s].length > 0) : GROUPS),
-    [filters, grouped]
-  );
+  /**
+   * A project split into phases reads as its phases, in order — "Phase 1 and
+   * what's in it, then Phase 2" — rather than as one big To Do pile. Status
+   * grouping stays the default everywhere else, and one click away here.
+   */
+  const groupByPhase =
+    filteredProjectId !== null && phases.length > 0 && searchParams.get("group") !== "status";
+
+  type Section = {
+    key: string;
+    label: string;
+    rows: Task[];
+    status?: TaskStatus;
+    phaseId?: string | null;
+  };
+
+  const sections = useMemo<Section[]>(() => {
+    if (groupByPhase) {
+      const byPhase = new Map<string | null, Task[]>();
+      for (const task of visible) {
+        const key = phases.some((phase) => phase.id === task.phaseId) ? task.phaseId : null;
+        if (!byPhase.has(key)) byPhase.set(key, []);
+        byPhase.get(key)!.push(task);
+      }
+      // Within a phase, unfinished work first, in the same order the status
+      // sections use, then whatever sort is chosen.
+      const rank = (task: Task) => GROUPS.indexOf(task.status);
+      const sortRows = (rows: Task[]) =>
+        rows.sort((a, b) => rank(a) - rank(b) || compareTasks(sort, a, b));
+
+      const list: Section[] = phases
+        .filter((phase) => !filters.phase || filters.phase === phase.id)
+        .map((phase) => ({
+          key: phase.id,
+          label: phase.name,
+          rows: sortRows(byPhase.get(phase.id) ?? []),
+          phaseId: phase.id,
+        }));
+      const loose = byPhase.get(null);
+      if (loose?.length) {
+        list.push({ key: "no-phase", label: "No phase", rows: sortRows(loose), phaseId: null });
+      }
+      // Same rule as below: a narrowing filter hides the empty sections.
+      return isActive(filters) && (filters.status || filters.priority || filters.overdue || filters.q)
+        ? list.filter((section) => section.rows.length > 0)
+        : list;
+    }
+
+    // Filtering down to one status and still showing four empty "Add a task to…"
+    // sections reads as broken, so empty groups drop out while a filter is on.
+    const statuses = isActive(filters)
+      ? GROUPS.filter((status) => grouped[status].length > 0)
+      : GROUPS;
+    return statuses.map((status) => ({
+      key: status,
+      label: STATUS_ITEMS[status],
+      rows: grouped[status],
+      status,
+    }));
+  }, [groupByPhase, visible, phases, filters, sort, grouped]);
 
   const chips: Array<{ key: keyof Filters; label: string }> = [];
   // Keywords first: when you arrive from the search palette, that is the filter
@@ -387,11 +448,11 @@ function ListView() {
       return next;
     });
 
-  const toggleGroup = (status: TaskStatus) =>
+  const toggleGroup = (key: string) =>
     setCollapsed((prev) => {
       const next = new Set(prev);
-      if (next.has(status)) next.delete(status);
-      else next.add(status);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
       return next;
     });
 
@@ -409,8 +470,9 @@ function ListView() {
   const allSelected =
     visible.length > 0 && selectedVisible.length === visible.length;
 
-  const openCreate = (status?: TaskStatus) => {
+  const openCreate = (status?: TaskStatus, phaseId: string | null = null) => {
     setCreateIn(status);
+    setCreateInPhase(phaseId);
     setIsCreateDialogOpen(true);
   };
 
@@ -429,6 +491,13 @@ function ListView() {
     const params = new URLSearchParams(searchParams.toString());
     if (next) params.set("phase", next);
     else params.delete("phase");
+    router.push(`/list?${params.toString()}`);
+  };
+
+  const setGrouping = (next: "phase" | "status") => {
+    const params = new URLSearchParams(searchParams.toString());
+    if (next === "status") params.set("group", "status");
+    else params.delete("group");
     router.push(`/list?${params.toString()}`);
   };
 
@@ -468,6 +537,21 @@ function ListView() {
             )}
             {/* Where phases are added and renamed — next to the project they
                 belong to, so splitting a project up doesn't mean leaving it. */}
+            {filteredProjectId && phases.length > 0 && (
+              <Select
+                items={GROUPING_ITEMS}
+                value={groupByPhase ? "phase" : "status"}
+                onValueChange={(next) => next && setGrouping(next as "phase" | "status")}
+              >
+                <SelectTrigger className="w-[170px]" aria-label="Group tasks by">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="phase">Group by phase</SelectItem>
+                  <SelectItem value="status">Group by status</SelectItem>
+                </SelectContent>
+              </Select>
+            )}
             {filteredProject && (
               <Button variant="outline" className="gap-2" onClick={() => setIsPhasesOpen(true)}>
                 <Layers className="h-4 w-4" />
@@ -602,20 +686,24 @@ function ListView() {
             </div>
 
             <div className="space-y-4">
-              {groups.map((status) => {
-                const rows = grouped[status];
-                const isCollapsed = collapsed.has(status);
+              {sections.map(({ key, label, rows, status, phaseId }) => {
+                const isCollapsed = collapsed.has(key);
 
                 return (
                   <section
-                    key={status}
+                    key={key}
                     data-status={status}
                     className="overflow-hidden rounded-xl border bg-card"
                   >
-                    <header className="flex items-center gap-2 border-b bg-[var(--tone-soft)]/60 px-3 py-2">
+                    <header
+                      className={cn(
+                        "flex items-center gap-2 border-b px-3 py-2",
+                        status ? "bg-[var(--tone-soft)]/60" : "bg-muted/50"
+                      )}
+                    >
                       <button
                         type="button"
-                        onClick={() => toggleGroup(status)}
+                        onClick={() => toggleGroup(key)}
                         aria-expanded={!isCollapsed}
                         className="flex items-center gap-2 rounded-md px-1 py-0.5 transition-colors hover:bg-background/60"
                       >
@@ -625,17 +713,29 @@ function ListView() {
                             isCollapsed && "-rotate-90"
                           )}
                         />
-                        <StatusDot status={status} />
-                        <span className="text-[11px] font-bold uppercase tracking-wider text-[var(--tone-ink)]">
-                          {STATUS_ITEMS[status]}
-                        </span>
-                        <span className="tone-chip rounded-full px-1.5 text-[11px] font-bold tabular-nums">
-                          {rows.length}
-                        </span>
+                        {status ? (
+                          <>
+                            <StatusDot status={status} />
+                            <span className="text-[11px] font-bold uppercase tracking-wider text-[var(--tone-ink)]">
+                              {label}
+                            </span>
+                            <span className="tone-chip rounded-full px-1.5 text-[11px] font-bold tabular-nums">
+                              {rows.length}
+                            </span>
+                          </>
+                        ) : (
+                          <>
+                            <Layers className="h-3.5 w-3.5 text-muted-foreground" />
+                            <span className="text-sm font-semibold">{label}</span>
+                            <span className="rounded-full bg-background px-1.5 text-[11px] font-bold tabular-nums text-muted-foreground">
+                              {rows.filter((task) => task.status === "DONE").length}/{rows.length}
+                            </span>
+                          </>
+                        )}
                       </button>
                       <button
                         type="button"
-                        onClick={() => openCreate(status)}
+                        onClick={() => openCreate(status, phaseId ?? null)}
                         className="ml-auto inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs text-muted-foreground transition-colors hover:bg-background/60 hover:text-foreground"
                       >
                         <Plus className="h-3.5 w-3.5" />
@@ -647,11 +747,11 @@ function ListView() {
                       (rows.length === 0 ? (
                         <button
                           type="button"
-                          onClick={() => openCreate(status)}
+                          onClick={() => openCreate(status, phaseId ?? null)}
                           className="flex w-full items-center gap-2 px-4 py-3 text-sm text-muted-foreground transition-colors hover:bg-muted/50 hover:text-foreground"
                         >
                           <Plus className="h-3.5 w-3.5" />
-                          Add a task to {STATUS_ITEMS[status]}
+                          Add a task to {label}
                         </button>
                       ) : (
                         <ul>
@@ -717,7 +817,7 @@ function ListView() {
                                         className="max-w-[9rem] shrink-0"
                                       />
                                     )}
-                                    {task.phase && task.phaseId !== filters.phase && (
+                                    {task.phase && !groupByPhase && task.phaseId !== filters.phase && (
                                       <PhaseBadge
                                         phase={task.phase}
                                         className="max-w-[9rem] shrink-0"
@@ -808,9 +908,10 @@ function ListView() {
           filters.project && filters.project !== UNFILED ? filters.project : null
         }
         defaultPhaseId={
-          filteredProjectId && filters.phase && filters.phase !== UNPHASED
+          createInPhase ??
+          (filteredProjectId && filters.phase && filters.phase !== UNPHASED
             ? filters.phase
-            : null
+            : null)
         }
         onTaskCreated={(task) => setTasks((prev) => [task, ...prev])}
       />
