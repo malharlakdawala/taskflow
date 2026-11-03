@@ -105,3 +105,25 @@ export async function captureMcpToolCall(
     },
   });
 }
+
+/** The MCP side of task_created, so the event counts every task created and
+ * not only the ones from the web dialog. Same properties as the dialog sends. */
+export async function captureMcpTaskCreated(
+  actor: AppUser,
+  task: { status: string; priority: string; projectId: string | null; hasDueDate: boolean }
+) {
+  const client = getPostHogServerClient();
+  if (!client) return;
+  await client.captureImmediate({
+    distinctId: actor.id,
+    event: "task_created",
+    properties: {
+      source: "mcp",
+      status: task.status,
+      priority: task.priority,
+      has_project: task.projectId !== null,
+      has_due_date: task.hasDueDate,
+      attachment_count: 0,
+    },
+  });
+}
