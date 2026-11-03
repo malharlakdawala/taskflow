@@ -18,6 +18,7 @@ import {
   summarizeTaskChanges,
   type TaskSnapshot,
 } from "@/lib/notifications/dispatch";
+import { captureMcpTaskCreated } from "@/lib/mcp/analytics";
 
 /**
  * The tools the hosted MCP endpoint exposes.
@@ -297,6 +298,14 @@ const createTask: McpTool = {
         assigneeId: assigneeId ?? actor.id,
         previousAssigneeId: null,
         actorId: actor.id,
+      })
+    );
+    after(() =>
+      captureMcpTaskCreated(actor, {
+        status,
+        priority: input.priority ?? "NONE",
+        projectId,
+        hasDueDate: Boolean(input.due_date),
       })
     );
 
