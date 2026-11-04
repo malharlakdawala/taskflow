@@ -18,7 +18,13 @@ declare global {
 if (typeof window !== "undefined" && process.env.NEXT_PUBLIC_POSTHOG_KEY) {
   window.posthog = posthog;
   posthog.init(process.env.NEXT_PUBLIC_POSTHOG_KEY, {
-    api_host: process.env.NEXT_PUBLIC_POSTHOG_HOST ?? "https://eu.i.posthog.com",
+    // First-party path, proxied to PostHog by the rewrites in next.config.ts
+    // so ad blockers don't drop it. ui_host keeps toolbar and replay links
+    // pointing at the PostHog app rather than at our own origin.
+    api_host: "/ingest",
+    ui_host: (
+      process.env.NEXT_PUBLIC_POSTHOG_HOST ?? "https://eu.i.posthog.com"
+    ).replace(".i.posthog.com", ".posthog.com"),
     // The App Router doesn't do full page loads on navigation, so posthog-js's
     // own history-based pageview capture misses client-side route changes —
     // captured manually by PostHogPageview below instead.
