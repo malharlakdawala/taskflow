@@ -6,8 +6,7 @@ const posthogHost =
 const nextConfig: NextConfig = {
   // posthog-js sends to /ingest on our own origin rather than straight to
   // PostHog, because ad blockers list the *.i.posthog.com hosts and silently
-  // drop pageviews, exceptions and replays for anyone running one. The assets
-  // host is the ingestion host with "-assets" after the region subdomain.
+  // drop pageviews, exceptions and replays for anyone running one.
   async rewrites() {
     return [
       {
