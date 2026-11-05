@@ -1,5 +1,5 @@
 import { config as loadEnv } from "dotenv";
-import { defineConfig } from "prisma/config";
+import { defineConfig, env } from "prisma/config";
 
 // Next.js reads .env.local, but the Prisma CLI does not, so load it explicitly.
 // Without this, `npx prisma ...` would silently fall back to a different
@@ -10,6 +10,6 @@ loadEnv({ quiet: true });
 export default defineConfig({
   schema: "prisma/schema.prisma",
   datasource: {
-    url: process.env["DATABASE_URL"],
+    url: env("DATABASE_URL"),
   },
 });

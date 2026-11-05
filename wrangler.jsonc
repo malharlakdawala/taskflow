@@ -5,7 +5,10 @@
 	// to add the scheduled() export the Cron Trigger below needs.
 	"main": "custom-worker.ts",
 	"compatibility_date": "2026-11-05",
-	"compatibility_flags": ["nodejs_compat", "global_fetch_strictly_public"],
+	"compatibility_flags": [
+		"nodejs_compat",
+		"global_fetch_strictly_public"
+	],
 	"assets": {
 		"directory": ".open-next/assets",
 		"binding": "ASSETS"
@@ -15,9 +18,16 @@
 	},
 	// Replaces vercel.json's cron (30 2 * * * = 08:00 IST). See custom-worker.ts.
 	"triggers": {
-		"crons": ["30 2 * * *"]
-	}
-
+		"crons": [
+			"30 2 * * *"
+		]
+	},
+	"hyperdrive": [
+		{
+			"binding": "HYPERDRIVE",
+			"id": "c45b383e1dfc471f93eb78d0db0b54c5"
+		}
+	]
 	// No `services` (WORKER_SELF_REFERENCE), `r2_buckets`, or `images` binding:
 	// TaskFlow has no ISR/SSG pages (see open-next.config.ts) and no next/image
 	// usage, so the revalidation queue and image-optimization bindings those

@@ -4,7 +4,9 @@
 // call in browser-side code from `Promise<any>` (DOM lib) to `Promise<unknown>`.
 import type { ExportedHandler, ExecutionContext } from "@cloudflare/workers-types";
 
-// @ts-expect-error: .open-next/worker.js only exists after `opennextjs-cloudflare build`.
+// @ts-ignore: .open-next/worker.js only exists after `opennextjs-cloudflare build` has
+// run at least once — `@ts-ignore` rather than `@ts-expect-error` because once that's
+// true locally, there's no error left to require suppressing.
 import { default as openNextWorker } from "./.open-next/worker.js";
 
 /**

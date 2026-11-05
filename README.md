@@ -476,6 +476,21 @@ claude mcp add todo-server -- node /absolute/path/to/mcp-server/build/index.js
 
 The task appears in the web app on the next refresh.
 
+## Deploying to Cloudflare Workers
+
+TaskFlow also builds for Cloudflare Workers via [`@opennextjs/cloudflare`](https://opennext.js.org/cloudflare), currently running at `https://taskflow.malharlakdawala.workers.dev`.
+
+1. `npm run cf:build` — builds with Next.js, then bundles for Workers. On Windows this needs [Developer Mode](https://learn.microsoft.com/windows/apps/get-started/enable-your-device-for-development) enabled (symlink creation requires it); without it the build fails with `EPERM: operation not permitted, symlink`.
+2. Create the database connection: `npx wrangler hyperdrive create taskflow-db --connection-string="<DATABASE_URL>" --binding HYPERDRIVE --update-config` — Hyperdrive keeps a warm connection pool to Supabase so the Worker doesn't pay a fresh TCP+TLS handshake (Tokyo, ~140ms) on every request. `src/lib/prisma.ts` builds a fresh Prisma client per request (never cached on `globalThis`) sourced from this binding, since Workers can't reuse I/O from a previous request's execution context.
+3. Upload secrets: `npx wrangler secret bulk <file>` with a `.env`-format file of the 14 variables listed in `.dev.vars.example`.
+4. `npx wrangler deploy`.
+
+The Cron Trigger (`wrangler.jsonc`, replacing `vercel.json`'s cron) is handled by `custom-worker.ts`, which wraps the generated worker to add the `scheduled()` export Cloudflare needs, calling `/api/cron/due-soon` in-process with the real `CRON_SECRET`.
+
+**Known limitation:** `/api/health`'s database check currently fails (`Wasm code generation disallowed by embedder`) — every current Prisma configuration (the default engine, `runtime = "workerd"`, and 6.x's engine-less `engineType = "client"`) compiles a WASM query compiler via `WebAssembly.compile()` at runtime somewhere, which Workers blocks unless the module is a static `import`. No bundler tested (Turbopack, webpack, OpenNext's own esbuild re-bundle) produces that static form. Everything else — routing, auth, Supabase, the cron trigger, Sentry, PostHog — works. See `prisma/schema.prisma` for the full note. Fixing this is a follow-up: either a custom build-time step that pre-compiles the WASM into a static import, or switching to [Prisma Accelerate](https://www.prisma.io/docs/accelerate) (no engine/WASM runs in the Worker at all, at the cost of a new hosted dependency and per-query latency).
+
+`vercel.json` is intentionally still in the repo — it isn't removed until the Workers deployment's database access actually works.
+
 ## Deploying to Vercel
 
 1. Import the repository in Vercel.

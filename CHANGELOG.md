@@ -12,6 +12,9 @@ throwing database errors — see [Updating](README.md#updating) for the procedur
 
 ### Added
 
+- **Cloudflare Workers deployment**, alongside Vercel, via `@opennextjs/cloudflare` — see README's "Deploying to Cloudflare Workers". Driven by Vercel's Hobby plan disabling the project (CPU cap). Routing, auth, Supabase, the cron trigger, Sentry, and PostHog are all verified working on Workers; the database connection currently isn't (known Prisma/WASM limitation, documented in `prisma/schema.prisma` and the README) — `vercel.json` stays until that's fixed.
+
+
 - **Project permissions.** A project can now be shared with specific members
   instead of the whole workspace: VIEWER sees its tasks, EDITOR can also
   create, edit, delete them and manage who else is on it. Manage a project's

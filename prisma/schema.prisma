@@ -15,6 +15,18 @@ generator client {
   previewFeatures = ["relationJoins"]
 }
 
+// KNOWN ISSUE — Prisma on Cloudflare Workers: every Prisma 7 engine
+// (default, or `runtime = "workerd"`) and Prisma 6's engine-less
+// `engineType = "client"` dynamically compiles a WASM query compiler at
+// runtime via WebAssembly.compile()/new WebAssembly.Module(), which Workers
+// refuses ("Wasm code generation disallowed by embedder") no matter which
+// bundler builds it (Turbopack, webpack, or OpenNext's own esbuild
+// re-bundle) — none of them turn that call into a static `import`, which is
+// the only form workerd allows. /api/health reports this as a failing db
+// check rather than crashing the whole Worker. Tracked as a follow-up to
+// either fix with a custom build-time WASM-inlining step or switch to
+// Prisma Accelerate (routes queries through Prisma's hosted proxy, so no
+// engine/WASM runs in the Worker at all).
 datasource db {
   provider = "postgresql"
 }
