@@ -1,0 +1,24 @@
+# Local dev vars for `next dev` / `npm run cf:preview` once wired through
+# initOpenNextCloudflareForDev() (see next.config.ts). Copy to `.dev.vars` and
+# fill in real values — see .env.example for what each one does and how to
+# get it; this file only lists the production secret names from wrangler
+# so local dev and the deployed Worker read the same set of names.
+#
+# DATABASE_URL here is read directly (src/lib/prisma.ts falls back to it when
+# there's no HYPERDRIVE binding), so local dev talks to Supabase directly
+# rather than through Hyperdrive — fine for the request volume of local dev.
+
+BREVO_API_KEY=
+CRON_SECRET=
+DATABASE_URL=
+EMAIL_FROM_ADDRESS=
+EMAIL_FROM_NAME=
+HEALTH_TOKEN=
+NEXT_PUBLIC_APP_URL=http://localhost:3000
+NEXT_PUBLIC_POSTHOG_HOST=
+NEXT_PUBLIC_POSTHOG_KEY=
+NEXT_PUBLIC_SUPABASE_ANON_KEY=
+NEXT_PUBLIC_SUPABASE_URL=
+OLLAMA_API_KEY=
+SENTRY_DSN=
+VAULT_ENCRYPTION_KEY=
