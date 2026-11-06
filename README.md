@@ -478,7 +478,7 @@ The task appears in the web app on the next refresh.
 
 ## Deploying to Cloudflare Workers
 
-TaskFlow also builds for Cloudflare Workers via [`@opennextjs/cloudflare`](https://opennext.js.org/cloudflare), currently running at `https://taskflow.malharlakdawala.workers.dev`.
+TaskFlow also builds for Cloudflare Workers via [`@opennextjs/cloudflare`](https://opennext.js.org/cloudflare), served at `https://taskflow.coldocean.io` (a Workers Custom Domain declared in `wrangler.jsonc`; the `workers.dev` URL is off).
 
 1. `npm run cf:build` — builds with Next.js, then bundles for Workers. On Windows this needs [Developer Mode](https://learn.microsoft.com/windows/apps/get-started/enable-your-device-for-development) enabled (symlink creation requires it); without it the build fails with `EPERM: operation not permitted, symlink`.
 2. Create the database connection: `npx wrangler hyperdrive create taskflow-db --connection-string="<DATABASE_URL>" --binding HYPERDRIVE --update-config` — Hyperdrive keeps a warm connection pool to Supabase so the Worker doesn't pay a fresh TCP+TLS handshake (Tokyo, ~140ms) on every request. `src/lib/prisma.ts` builds a fresh Prisma client per request (never cached on `globalThis`) sourced from this binding, since Workers can't reuse I/O from a previous request's execution context.
