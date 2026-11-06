@@ -12,7 +12,7 @@ throwing database errors — see [Updating](README.md#updating) for the procedur
 
 ### Added
 
-- **Cloudflare Workers deployment**, alongside Vercel, via `@opennextjs/cloudflare` — see README's "Deploying to Cloudflare Workers". Driven by Vercel's Hobby plan disabling the project (CPU cap). Routing, auth, Supabase, the cron trigger, Sentry, and PostHog are all verified working on Workers; the database connection currently isn't (known Prisma/WASM limitation, documented in `prisma/schema.prisma` and the README) — `vercel.json` stays until that's fixed.
+- **Cloudflare Workers deployment**, alongside Vercel, via `@opennextjs/cloudflare` — see README's "Deploying to Cloudflare Workers". Driven by Vercel's Hobby plan disabling the project (CPU cap). The Worker uses a separate `runtime = "cloudflare"` Prisma client and a webpack build so the query compiler ships as a precompiled WASM module; see the README for why.
 
 
 - **Project permissions.** A project can now be shared with specific members

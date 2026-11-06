@@ -9,9 +9,10 @@
     "lint": "eslint",
     "seed": "node --import tsx --env-file-if-exists=.env.local scripts/seed.ts",
     "postinstall": "prisma generate",
-    "cf:build": "opennextjs-cloudflare build",
-    "cf:preview": "opennextjs-cloudflare build && opennextjs-cloudflare preview",
-    "cf:deploy": "opennextjs-cloudflare build && opennextjs-cloudflare deploy"
+    "cf:next-build": "cross-env TASKFLOW_BUILD_TARGET=cloudflare next build --webpack",
+    "cf:build": "npm run cf:next-build && opennextjs-cloudflare build --skipNextBuild",
+    "cf:preview": "npm run cf:next-build && opennextjs-cloudflare build --skipNextBuild && opennextjs-cloudflare preview",
+    "cf:deploy": "npm run cf:next-build && opennextjs-cloudflare build --skipNextBuild && opennextjs-cloudflare deploy"
   },
   "dependencies": {
     "@ai-sdk/openai-compatible": "^3.0.65",
@@ -71,6 +72,7 @@
     "@types/node": "^20",
     "@types/react": "^19",
     "@types/react-dom": "^19",
+    "cross-env": "^10.1.0",
     "eslint": "^9",
     "eslint-config-next": "16.2.11",
     "tailwindcss": "^4",

@@ -487,9 +487,15 @@ TaskFlow also builds for Cloudflare Workers via [`@opennextjs/cloudflare`](https
 
 The Cron Trigger (`wrangler.jsonc`, replacing `vercel.json`'s cron) is handled by `custom-worker.ts`, which wraps the generated worker to add the `scheduled()` export Cloudflare needs, calling `/api/cron/due-soon` in-process with the real `CRON_SECRET`.
 
-**Known limitation:** `/api/health`'s database check currently fails (`Wasm code generation disallowed by embedder`) — every current Prisma configuration (the default engine, `runtime = "workerd"`, and 6.x's engine-less `engineType = "client"`) compiles a WASM query compiler via `WebAssembly.compile()` at runtime somewhere, which Workers blocks unless the module is a static `import`. No bundler tested (Turbopack, webpack, OpenNext's own esbuild re-bundle) produces that static form. Everything else — routing, auth, Supabase, the cron trigger, Sentry, PostHog — works. See `prisma/schema.prisma` for the full note. Fixing this is a follow-up: either a custom build-time step that pre-compiles the WASM into a static import, or switching to [Prisma Accelerate](https://www.prisma.io/docs/accelerate) (no engine/WASM runs in the Worker at all, at the cost of a new hosted dependency and per-query latency).
+**How Prisma runs on Workers.** Workers refuse to compile WebAssembly at request time, which is what the default Prisma client does with its query compiler. So the Worker uses a second generated client (`clientCloudflare` in `prisma/schema.prisma`, `runtime = "cloudflare"`, output `src/generated/prisma-cloudflare`) that imports the compiler as a static `.wasm?module` import that wrangler ships precompiled. `cf:build` wires that up:
 
-`vercel.json` is intentionally still in the repo — it isn't removed until the Workers deployment's database access actually works.
+- `cf:next-build` sets `TASKFLOW_BUILD_TARGET=cloudflare`, which makes `next.config.ts` swap `@/generated/prisma/client` for the Cloudflare client, keep the `.wasm?module` import external for wrangler, and emit `output: "standalone"` (OpenNext's middleware step copies into it).
+- It builds with **webpack**, not Turbopack: Turbopack hangs indefinitely compiling the Cloudflare client's WASM import.
+- `opennextjs-cloudflare build --skipNextBuild` then bundles that output.
+
+The Vercel build and `next dev` never set `TASKFLOW_BUILD_TARGET`, so they keep Turbopack and the default client.
+
+`vercel.json` stays in the repo as long as Vercel remains a deploy target.
 
 ## Deploying to Vercel
 
