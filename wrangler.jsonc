@@ -16,6 +16,13 @@
 	"observability": {
 		"enabled": true
 	},
+	// Run next to the Supabase database (Tokyo, AWS ap-northeast-1), as Vercel
+	// did with regions: ["hnd1"]. Otherwise the Worker runs near each visitor
+	// (e.g. Singapore for India) and every query and auth check pays that
+	// round trip. Static assets still come from the nearest edge.
+	"placement": {
+		"region": "aws:ap-northeast-1"
+	},
 	// Workers Custom Domain: Cloudflare owns the DNS record and certificate for
 	// this hostname. It previously was a DNS-only CNAME to Vercel.
 	"routes": [

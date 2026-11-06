@@ -14,19 +14,19 @@ import { getCloudflareContext } from "@opennextjs/cloudflare";
  * without the Hyperdrive binding configured (e.g. a plain `next build` check).
  */
 type WorkerEnv = { HYPERDRIVE?: { connectionString: string }; DATABASE_URL?: string };
+type RequestContext = { env: WorkerEnv; ctx: object };
 
 // Throws outside a Worker and `next dev` (e.g. on Vercel or `next start`),
 // where there are no bindings and process.env is the source.
-function cloudflareEnv(): WorkerEnv {
+function cloudflareContext(): RequestContext | null {
   try {
-    return getCloudflareContext().env as unknown as WorkerEnv;
+    return getCloudflareContext() as unknown as RequestContext;
   } catch {
-    return {};
+    return null;
   }
 }
 
-function createPrismaClient() {
-  const env = cloudflareEnv();
+function createPrismaClient(env: WorkerEnv) {
   const connectionString = env.HYPERDRIVE?.connectionString ?? env.DATABASE_URL ?? process.env.DATABASE_URL;
 
   if (!connectionString) {
@@ -43,24 +43,37 @@ function createPrismaClient() {
 }
 
 /**
- * Deliberately NOT cached on `globalThis`. On Cloudflare Workers, a request
- * can't reuse I/O (open sockets, pending promises) created during a *different*
- * request's execution context — workerd throws "Cannot perform I/O on behalf
- * of a different request" the moment it's tried. A module-level singleton
- * would do exactly that the first time two requests landed on the same warm
- * isolate. Building a fresh client on every property access costs a little
- * more than strictly necessary within a single request that makes several
- * calls, but it's the only option that can't silently reintroduce that crash
- * — and Hyperdrive is what keeps "fresh client" cheap instead of slow.
+ * One client per request on Workers, keyed on that request's ExecutionContext.
+ * Not one per isolate: workerd refuses to let a request use sockets opened by
+ * a different request ("Cannot perform I/O on behalf of a different request").
+ * Not one per query either: each client opens its own connection and
+ * instantiates the WASM query compiler, and a request may only hold 6
+ * connections open, so a page firing queries in parallel would stall.
  *
- * The lazy Proxy shape itself is kept for the same reason as before: `next
- * build` imports every route module to collect page data, so constructing a
- * client at module scope would turn a missing connection string into a build
- * failure rather than a request-time error.
+ * Outside Workers (Vercel, `next start`) one shared client is the normal setup.
+ *
+ * Lazy so `next build`, which imports every route module, doesn't fail on a
+ * missing connection string.
  */
+const perRequest = new WeakMap<object, PrismaClient>();
+let shared: PrismaClient | undefined;
+
+function getPrismaClient(): PrismaClient {
+  const context = cloudflareContext();
+  if (!context) {
+    return (shared ??= createPrismaClient({}));
+  }
+  let client = perRequest.get(context.ctx);
+  if (!client) {
+    client = createPrismaClient(context.env);
+    perRequest.set(context.ctx, client);
+  }
+  return client;
+}
+
 export const prisma = new Proxy({} as PrismaClient, {
   get(_target, property) {
-    const client = createPrismaClient();
+    const client = getPrismaClient();
     const value = Reflect.get(client, property);
     return typeof value === "function" ? value.bind(client) : value;
   },
