@@ -4,9 +4,11 @@
 // call in browser-side code from `Promise<any>` (DOM lib) to `Promise<unknown>`.
 import type { ExportedHandler, ExecutionContext } from "@cloudflare/workers-types";
 
-// @ts-ignore: .open-next/worker.js only exists after `opennextjs-cloudflare build` has
-// run at least once — `@ts-ignore` rather than `@ts-expect-error` because once that's
-// true locally, there's no error left to require suppressing.
+// .open-next/worker.js only exists after `opennextjs-cloudflare build` has run, so
+// this import errors in CI but not locally after a build; `@ts-expect-error` would
+// fail in the second case, so `@ts-ignore` is the only directive valid in both.
+// eslint-disable-next-line @typescript-eslint/ban-ts-comment
+// @ts-ignore
 import { default as openNextWorker } from "./.open-next/worker.js";
 
 /**
