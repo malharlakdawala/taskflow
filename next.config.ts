@@ -1,5 +1,7 @@
 import type { NextConfig } from "next";
+import { PHASE_DEVELOPMENT_SERVER } from "next/constants";
 import path from "node:path";
+import { initOpenNextCloudflareForDev } from "@opennextjs/cloudflare";
 
 // `cf:build` sets this so the Worker gets the `runtime = "cloudflare"` Prisma
 // client (static WASM import, see prisma/schema.prisma) instead of the
@@ -57,10 +59,14 @@ const nextConfig: NextConfig = {
     : undefined,
 };
 
-export default nextConfig;
-
 // Lets `next dev` resolve Cloudflare bindings (e.g. the HYPERDRIVE binding
 // src/lib/prisma.ts reads via getCloudflareContext()) against the values in
-// .dev.vars / wrangler.jsonc, instead of only working once deployed.
-import { initOpenNextCloudflareForDev } from "@opennextjs/cloudflare";
-initOpenNextCloudflareForDev();
+// .dev.vars / wrangler.jsonc. Dev server only: it starts wrangler's local
+// proxy, which fails `next build` anywhere without a local Hyperdrive
+// connection string (CI, Vercel).
+export default function config(phase: string): NextConfig {
+  if (phase === PHASE_DEVELOPMENT_SERVER) {
+    initOpenNextCloudflareForDev();
+  }
+  return nextConfig;
+}

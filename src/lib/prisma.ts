@@ -13,11 +13,20 @@ import { getCloudflareContext } from "@opennextjs/cloudflare";
  * handshake. `env.DATABASE_URL` is kept as a fallback for any environment
  * without the Hyperdrive binding configured (e.g. a plain `next build` check).
  */
+type WorkerEnv = { HYPERDRIVE?: { connectionString: string }; DATABASE_URL?: string };
+
+// Throws outside a Worker and `next dev` (e.g. on Vercel or `next start`),
+// where there are no bindings and process.env is the source.
+function cloudflareEnv(): WorkerEnv {
+  try {
+    return getCloudflareContext().env as unknown as WorkerEnv;
+  } catch {
+    return {};
+  }
+}
+
 function createPrismaClient() {
-  const env = getCloudflareContext().env as unknown as {
-    HYPERDRIVE?: { connectionString: string };
-    DATABASE_URL?: string;
-  };
+  const env = cloudflareEnv();
   const connectionString = env.HYPERDRIVE?.connectionString ?? env.DATABASE_URL ?? process.env.DATABASE_URL;
 
   if (!connectionString) {
