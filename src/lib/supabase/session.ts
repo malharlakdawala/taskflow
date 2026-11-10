@@ -10,7 +10,13 @@ import { missingSupabaseEnv, supabaseEnvError } from "@/lib/supabase/config";
  * would make the whole feature a dead end. The page itself reveals nothing
  * without a valid token.
  */
-const PUBLIC_ROUTES = ["/login", "/signup", "/auth/callback", "/invite"];
+const PUBLIC_ROUTES = [
+  "/login",
+  "/signup",
+  "/forgot-password",
+  "/auth/callback",
+  "/invite",
+];
 
 function isPublicRoute(pathname: string) {
   return PUBLIC_ROUTES.some(
