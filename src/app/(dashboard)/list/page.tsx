@@ -552,8 +552,11 @@ function ListView() {
   return (
     <div className="enter flex h-full flex-col">
       <header className="border-b bg-card/60 px-6 py-4 backdrop-blur">
-        <div className="flex items-center justify-between gap-4">
-          <div className="min-w-0">
+        {/* Wraps rather than squeezing: with a project picked the toolbar is
+            wider than most screens, and squeezing crushed the title column
+            down to one word per line. */}
+        <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-3">
+          <div className="min-w-[16rem] flex-1">
             <h1 className="text-2xl font-bold tracking-tight">List</h1>
             <p className="text-sm text-muted-foreground">
               {selectedVisible.length > 0
@@ -563,7 +566,7 @@ function ListView() {
                   } · click a row to open it, or edit any field in place`}
             </p>
           </div>
-          <div className="flex shrink-0 items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             <ProjectFilter value={filters.project} onChange={setProjectFilter} />
             <AssigneeFilter value={filters.assignee} onChange={setAssigneeFilter} />
             {filteredProjectId && (
