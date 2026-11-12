@@ -40,6 +40,11 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import {
+  AssigneeFilter,
+  UNASSIGNED_FILTER,
+} from "@/components/tasks/assignee-filter";
+import { useMembers } from "@/lib/use-members";
 import { notify } from "@/lib/notify";
 import { useProjects } from "@/lib/use-projects";
 import { matchesAllTerms, parseSearchTerms } from "@/lib/search/terms";
@@ -137,6 +142,8 @@ type Filters = {
   project: string | null;
   /** A phase id, or UNPHASED. Only meaningful with a real project filter. */
   phase: string | null;
+  /** A user id, or UNASSIGNED_FILTER for tasks nobody owns. */
+  assignee: string | null;
   /** Keywords, as handed over by the global search palette. */
   q: string | null;
 };
@@ -150,6 +157,7 @@ const isActive = (filters: Filters) =>
   filters.overdue ||
   filters.project !== null ||
   filters.phase !== null ||
+  filters.assignee !== null ||
   filters.q !== null;
 
 /**
@@ -183,6 +191,7 @@ function parseFilters(params: URLSearchParams): Filters {
     // matches nothing, which is a better outcome than a crash or a silent reset.
     project: params.get("project") || null,
     phase: params.get("project") ? params.get("phase") || null : null,
+    assignee: params.get("assignee") || null,
     q: params.get("q")?.trim() || null,
   };
 }
@@ -199,6 +208,8 @@ function urlWithout(filters: Filters, drop: keyof Filters): string {
   // A phase is part of its project — dropping the project drops it too.
   if (drop !== "project" && drop !== "phase" && filters.phase)
     next.set("phase", filters.phase);
+  if (drop !== "assignee" && filters.assignee)
+    next.set("assignee", filters.assignee);
   if (drop !== "q" && filters.q) next.set("q", filters.q);
   const query = next.toString();
   return query ? `/list?${query}` : "/list";
@@ -227,6 +238,7 @@ function ListView() {
   );
   // Only for naming the active filter chip — the tasks carry their own project.
   const { projects } = useProjects();
+  const { members } = useMembers();
   const filteredProjectId =
     filters.project && filters.project !== UNFILED ? filters.project : null;
   const { phases } = usePhases(filteredProjectId);
@@ -299,6 +311,13 @@ function ListView() {
           return false;
         }
       }
+      if (filters.assignee) {
+        if (filters.assignee === UNASSIGNED_FILTER) {
+          if (task.assigneeId !== null) return false;
+        } else if (task.assigneeId !== filters.assignee) {
+          return false;
+        }
+      }
       if (filters.phase) {
         if (filters.phase === UNPHASED) {
           if (task.phaseId !== null) return false;
@@ -362,7 +381,7 @@ function ListView() {
         list.push({ key: "no-phase", label: "No phase", rows: sortRows(loose), phaseId: null });
       }
       // Same rule as below: a narrowing filter hides the empty sections.
-      return isActive(filters) && (filters.status || filters.priority || filters.overdue || filters.q)
+      return isActive(filters) && (filters.status || filters.priority || filters.overdue || filters.assignee || filters.q)
         ? list.filter((section) => section.rows.length > 0)
         : list;
     }
@@ -400,6 +419,16 @@ function ListView() {
         ? NO_PROJECT_LABEL
         : projects.find((project) => project.id === filters.project)?.name;
     chips.push({ key: "project", label: `Project: ${name ?? "unknown"}` });
+  }
+  if (filters.assignee) {
+    const member = members.find((m) => m.id === filters.assignee);
+    const name =
+      filters.assignee === UNASSIGNED_FILTER
+        ? "Unassigned"
+        : member
+          ? displayName(member)
+          : "unknown";
+    chips.push({ key: "assignee", label: `Assignee: ${name}` });
   }
   if (filters.phase) {
     const name =
@@ -487,6 +516,14 @@ function ListView() {
     router.push(query ? `/list?${query}` : "/list");
   };
 
+  const setAssigneeFilter = (next: string | null) => {
+    const params = new URLSearchParams(searchParams.toString());
+    if (next) params.set("assignee", next);
+    else params.delete("assignee");
+    const query = params.toString();
+    router.push(query ? `/list?${query}` : "/list");
+  };
+
   const setPhaseFilter = (next: string | null) => {
     const params = new URLSearchParams(searchParams.toString());
     if (next) params.set("phase", next);
@@ -528,6 +565,7 @@ function ListView() {
           </div>
           <div className="flex shrink-0 items-center gap-2">
             <ProjectFilter value={filters.project} onChange={setProjectFilter} />
+            <AssigneeFilter value={filters.assignee} onChange={setAssigneeFilter} />
             {filteredProjectId && (
               <PhaseFilter
                 projectId={filteredProjectId}
