@@ -14,6 +14,7 @@ export default function SignupPage() {
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [needsConfirmation, setNeedsConfirmation] = useState(false);
+  const [alreadyRegistered, setAlreadyRegistered] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const router = useRouter();
 
@@ -21,6 +22,7 @@ export default function SignupPage() {
     e.preventDefault();
     setIsLoading(true);
     setError(null);
+    setAlreadyRegistered(false);
 
     const { createClient } = await import("@/lib/supabase/client");
     const supabase = createClient();
@@ -36,6 +38,15 @@ export default function SignupPage() {
 
     if (authError) {
       setError(authError.message);
+      setIsLoading(false);
+      return;
+    }
+
+    // Signing up with an email that is already registered "succeeds" without
+    // sending anything (Supabase hides which emails exist). The tell is a user
+    // with no identities. Say so, rather than promising an email that never comes.
+    if (data.user && data.user.identities?.length === 0) {
+      setAlreadyRegistered(true);
       setIsLoading(false);
       return;
     }
@@ -85,6 +96,19 @@ export default function SignupPage() {
             {error && (
               <div className="p-3 text-sm text-red-500 bg-red-50 dark:bg-red-950/30 rounded-md">
                 {error}
+              </div>
+            )}
+            {alreadyRegistered && (
+              <div className="p-3 text-sm bg-muted rounded-md">
+                <strong>{email}</strong> already has an account.{" "}
+                <Link href="/login" className="text-primary hover:underline">
+                  Sign in
+                </Link>{" "}
+                or{" "}
+                <Link href="/forgot-password" className="text-primary hover:underline">
+                  reset your password
+                </Link>
+                .
               </div>
             )}
             <div className="space-y-2">
