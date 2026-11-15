@@ -14,6 +14,7 @@ import {
   Paperclip,
   ArrowUpDown,
   Layers,
+  CircleCheck,
   X,
 } from "lucide-react";
 import { ProjectPhasesDialog } from "@/components/projects/project-phases-dialog";
@@ -406,6 +407,11 @@ function ListView() {
         isActive(filters) && (filters.status || filters.priority || filters.overdue || filters.assignee || filters.q)
           ? list.filter((section) => section.rows.length > 0)
           : list;
+      // A phase whose tasks are all finished sinks below the ones still in
+      // progress, so open work stays at the top of the page.
+      const isComplete = (section: Section) =>
+        !!section.progress && section.progress.total > 0 && section.progress.done === section.progress.total;
+      shown.sort((a, b) => Number(isComplete(a)) - Number(isComplete(b)));
       if (done.length) {
         shown.push({
           key: "DONE",
@@ -761,6 +767,8 @@ function ListView() {
             <div className="space-y-4">
               {sections.map(({ key, label, rows, status, phaseId, progress }) => {
                 const isCollapsed = collapsed.has(key);
+                const isComplete =
+                  !!progress && progress.total > 0 && progress.done === progress.total;
 
                 return (
                   <section
@@ -770,7 +778,7 @@ function ListView() {
                   >
                     <header
                       className={cn(
-                        "flex items-center gap-2 border-b px-3 py-2",
+                        "flex items-center gap-2 border-b px-3 py-2 last:border-b-0",
                         status ? "bg-[var(--tone-soft)]/60" : "bg-muted/50"
                       )}
                     >
@@ -798,8 +806,19 @@ function ListView() {
                           </>
                         ) : (
                           <>
-                            <Layers className="h-3.5 w-3.5 text-muted-foreground" />
-                            <span className="text-sm font-semibold">{label}</span>
+                            {isComplete ? (
+                              <CircleCheck className="h-3.5 w-3.5 text-emerald-600" />
+                            ) : (
+                              <Layers className="h-3.5 w-3.5 text-muted-foreground" />
+                            )}
+                            <span
+                              className={cn(
+                                "text-sm font-semibold",
+                                isComplete && "text-muted-foreground"
+                              )}
+                            >
+                              {label}
+                            </span>
                             <span className="rounded-full bg-background px-1.5 text-[11px] font-bold tabular-nums text-muted-foreground">
                               {progress
                                 ? `${progress.done}/${progress.total}`
@@ -818,7 +837,10 @@ function ListView() {
                       </button>
                     </header>
 
+                    {/* A finished phase is just its header — the "Add a task"
+                        row would only make it look unfinished. */}
                     {!isCollapsed &&
+                      !(isComplete && rows.length === 0) &&
                       (rows.length === 0 ? (
                         <button
                           type="button"
