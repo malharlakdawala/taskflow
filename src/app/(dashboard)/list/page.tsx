@@ -352,13 +352,27 @@ function ListView() {
     rows: Task[];
     status?: TaskStatus;
     phaseId?: string | null;
+    /** Phase sections hide finished work, so their progress chip counts it here. */
+    progress?: { done: number; total: number };
   };
 
   const sections = useMemo<Section[]>(() => {
     if (groupByPhase) {
       const byPhase = new Map<string | null, Task[]>();
+      const totals = new Map<string | null, { done: number; total: number }>();
+      // Finished tasks leave their phase for one "Done" section at the bottom,
+      // so each phase only shows the work that's still open.
+      const done: Task[] = [];
       for (const task of visible) {
         const key = phases.some((phase) => phase.id === task.phaseId) ? task.phaseId : null;
+        const count = totals.get(key) ?? { done: 0, total: 0 };
+        count.total += 1;
+        if (task.status === "DONE") count.done += 1;
+        totals.set(key, count);
+        if (task.status === "DONE") {
+          done.push(task);
+          continue;
+        }
         if (!byPhase.has(key)) byPhase.set(key, []);
         byPhase.get(key)!.push(task);
       }
@@ -375,15 +389,33 @@ function ListView() {
           label: phase.name,
           rows: sortRows(byPhase.get(phase.id) ?? []),
           phaseId: phase.id,
+          progress: totals.get(phase.id) ?? { done: 0, total: 0 },
         }));
       const loose = byPhase.get(null);
       if (loose?.length) {
-        list.push({ key: "no-phase", label: "No phase", rows: sortRows(loose), phaseId: null });
+        list.push({
+          key: "no-phase",
+          label: "No phase",
+          rows: sortRows(loose),
+          phaseId: null,
+          progress: totals.get(null),
+        });
       }
       // Same rule as below: a narrowing filter hides the empty sections.
-      return isActive(filters) && (filters.status || filters.priority || filters.overdue || filters.assignee || filters.q)
-        ? list.filter((section) => section.rows.length > 0)
-        : list;
+      const shown =
+        isActive(filters) && (filters.status || filters.priority || filters.overdue || filters.assignee || filters.q)
+          ? list.filter((section) => section.rows.length > 0)
+          : list;
+      if (done.length) {
+        shown.push({
+          key: "DONE",
+          label: STATUS_ITEMS.DONE,
+          rows: sortRows(done),
+          status: "DONE",
+          phaseId: null,
+        });
+      }
+      return shown;
     }
 
     // Filtering down to one status and still showing four empty "Add a task to…"
@@ -727,7 +759,7 @@ function ListView() {
             </div>
 
             <div className="space-y-4">
-              {sections.map(({ key, label, rows, status, phaseId }) => {
+              {sections.map(({ key, label, rows, status, phaseId, progress }) => {
                 const isCollapsed = collapsed.has(key);
 
                 return (
@@ -769,7 +801,9 @@ function ListView() {
                             <Layers className="h-3.5 w-3.5 text-muted-foreground" />
                             <span className="text-sm font-semibold">{label}</span>
                             <span className="rounded-full bg-background px-1.5 text-[11px] font-bold tabular-nums text-muted-foreground">
-                              {rows.filter((task) => task.status === "DONE").length}/{rows.length}
+                              {progress
+                                ? `${progress.done}/${progress.total}`
+                                : `${rows.filter((task) => task.status === "DONE").length}/${rows.length}`}
                             </span>
                           </>
                         )}
@@ -858,7 +892,7 @@ function ListView() {
                                         className="max-w-[9rem] shrink-0"
                                       />
                                     )}
-                                    {task.phase && !groupByPhase && task.phaseId !== filters.phase && (
+                                    {task.phase && (!groupByPhase || status === "DONE") && task.phaseId !== filters.phase && (
                                       <PhaseBadge
                                         phase={task.phase}
                                         className="max-w-[9rem] shrink-0"
