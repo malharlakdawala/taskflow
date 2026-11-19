@@ -75,7 +75,10 @@ export function PhasePicker({
       <SelectTrigger aria-label="Phase">
         <SelectValue placeholder={isLoading ? "Loading…" : NO_PHASE_LABEL} />
       </SelectTrigger>
-      <SelectContent>
+      {/* Dropped below the trigger: aligned over it, the selected "No phase"
+          row lands exactly on the closed button and the open list looks
+          unopened. */}
+      <SelectContent alignItemWithTrigger={false} align="start">
         <SelectItem value={NO_PHASE}>{NO_PHASE_LABEL}</SelectItem>
         {phases.map((phase) => (
           <SelectItem key={phase.id} value={phase.id}>

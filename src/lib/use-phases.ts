@@ -61,7 +61,12 @@ export function usePhases(projectId: string | null) {
 
     fetchPhases(projectId)
       .then(receive)
-      .catch((error) => console.error("Failed to fetch phases:", error));
+      .catch((error) => {
+        console.error("Failed to fetch phases:", error);
+        // Settle on no phases: left unresolved, isLoading stays true and the
+        // picker sits disabled for good.
+        receive([]);
+      });
 
     return () => {
       cancelled = true;
