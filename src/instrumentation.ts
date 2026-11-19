@@ -1,5 +1,7 @@
 import * as Sentry from "@sentry/nextjs";
+import type { Instrumentation } from "next";
 import { sentryOptions } from "@/lib/sentry";
+import { captureRequestError } from "@/lib/posthog-server";
 
 export function register() {
   // Same options for the Node.js and Edge runtimes.
@@ -7,4 +9,7 @@ export function register() {
 }
 
 /** Reports unhandled errors from route handlers, server components and actions. */
-export const onRequestError = Sentry.captureRequestError;
+export const onRequestError: Instrumentation.onRequestError = (error, request, context) => {
+  Sentry.captureRequestError(error, request, context);
+  return captureRequestError(error, request, context);
+};
