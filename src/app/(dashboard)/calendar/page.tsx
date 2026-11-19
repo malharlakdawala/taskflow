@@ -196,9 +196,14 @@ export default function CalendarPage() {
                             <span className="text-sm font-medium line-clamp-1">
                               {task.title}
                             </span>
-                            <span className="text-xs text-muted-foreground">
-                              {format(new Date(task.dueDate!), "MMM d")}
-                            </span>
+                            <div className="flex shrink-0 items-center gap-2">
+                              <Badge variant="outline" className={`text-xs ${statusConfig.color}`}>
+                                {statusConfig.label}
+                              </Badge>
+                              <span className="text-xs text-muted-foreground">
+                                {format(new Date(task.dueDate!), "MMM d")}
+                              </span>
+                            </div>
                           </Link>
                         );
                       })}
