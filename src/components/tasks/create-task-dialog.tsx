@@ -94,6 +94,10 @@ export function CreateTaskDialog({
     null,
   );
 
+  useEffect(() => {
+    if (open) posthog?.capture("task_create_dialog_opened", { source: "web" });
+  }, [open, posthog]);
+
   const handleOpenChange = (next: boolean) => {
     if (!next) setCreated(null);
     onOpenChange(next);
@@ -260,6 +264,7 @@ export function CreateTaskDialog({
       }
 
       posthog?.capture("task_created", {
+        source: "web",
         status,
         priority,
         has_project: projectId !== null,
@@ -271,6 +276,10 @@ export function CreateTaskDialog({
       setCreated({ id: task.id, title: task.title });
     } catch (error) {
       console.error("Failed to create task:", error);
+      posthog?.capture("task_create_failed", {
+        source: "web",
+        error_message: error instanceof Error ? error.message : String(error),
+      });
       notify.error(
         "Could not create task",
         error instanceof Error ? error.message : undefined,
